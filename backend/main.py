@@ -1,3 +1,4 @@
+import json
 import math
 import os
 import uuid
@@ -8,9 +9,10 @@ from urllib.parse import quote
 
 import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
 
 from db import get_conn, init_db
 
@@ -70,6 +72,55 @@ def list_zones(
     params.append(limit)
     with get_conn() as conn:
         return [dict(r) for r in conn.execute(sql, params)]
+
+
+@app.get("/api/facilities")
+def list_facilities(
+    south: float = Query(...),
+    west: float = Query(...),
+    north: float = Query(...),
+    east: float = Query(...),
+    limit: int = Query(5000, le=20000),
+):
+    """지도 영역 안의 금연 규칙 대상 시설 (축소/확대와 상관없이 DB에 저장된 전체에서 조회)
+
+    area: 시설 경계선 기준으로 계산한 금연 구역(MultiPolygon). 경계선을 모르면 null 이고 r(m) 반경 원으로 그림.
+    지하철역 점('subway')은 출입구('subway-exit')로 대체했으므로 내려주지 않음.
+    """
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, type_key, name, lat, lng, area, r FROM facilities "
+            "WHERE type_key != 'subway' AND lat BETWEEN ? AND ? AND lng BETWEEN ? AND ? LIMIT ?",
+            (south, north, west, east, limit),
+        )
+        out = []
+        for r in rows:
+            d = dict(r)
+            d["area"] = json.loads(d["area"]) if d["area"] else None
+            out.append(d)
+        return out
+
+
+class FacilityIn(BaseModel):
+    kakao_id: str = Field(max_length=40)
+    type_key: str = Field(max_length=40)
+    name: str = Field(max_length=100)
+    lat: float
+    lng: float
+
+
+@app.post("/api/dev/facilities")
+def ingest_facilities(items: list[FacilityIn], request: Request):
+    """개발용: 브라우저(카카오 JS SDK)로 수집한 시설을 저장. ALLOW_DEV_INGEST=1 이고 같은 PC에서 온 요청만 허용"""
+    if os.getenv("ALLOW_DEV_INGEST") != "1" or (request.client and request.client.host not in ("127.0.0.1", "::1")):
+        raise HTTPException(404)
+    with get_conn() as conn:
+        conn.executemany(
+            "INSERT OR IGNORE INTO facilities (kakao_id, type_key, name, lat, lng) VALUES (?,?,?,?,?)",
+            [(i.kakao_id, i.type_key, i.name, i.lat, i.lng) for i in items],
+        )
+        total = conn.execute("SELECT COUNT(*) FROM facilities").fetchone()[0]
+    return {"received": len(items), "total": total}
 
 
 @app.get("/api/zones/{zone_id}")

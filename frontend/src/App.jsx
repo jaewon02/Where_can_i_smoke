@@ -1,14 +1,30 @@
 import { useEffect, useRef, useState } from "react";
 import { useKakao } from "./useKakaoMap.js";
-import { FACILITY_TYPES, searchAll } from "./facilities.js";
+import { RULE_BY_KEY } from "./facilities.js";
 import ZonePanel from "./ZonePanel.jsx";
 import SearchBox from "./SearchBox.jsx";
 import ZoneList from "./ZoneList.jsx";
 import RoutePanel from "./RoutePanel.jsx";
 import Roulette from "./Roulette.jsx";
 import QuitAd from "./QuitAd.jsx";
+import { buildAreas } from "./areas.js";
 
 const COLORS = { smoking: "#e5484d", nonsmoking: "#1f9d55" };
+const BADGE_MAX_LEVEL = 2; // 이 지도 레벨 이하로 확대했을 때만 금연구역 배지 표시
+
+// 시설 범위의 큰 쪽 길이(m): 경계선 다각형이면 그 바깥 사각형, 아니면 반경 원의 지름
+function extentM(f) {
+  if (!f.area) return 2 * f.r;
+  let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const poly of f.area)
+    for (const [x, y] of poly[0]) {
+      if (x < x0) x0 = x;
+      if (x > x1) x1 = x;
+      if (y < y0) y0 = y;
+      if (y > y1) y1 = y;
+    }
+  return Math.max((x1 - x0) * 111320 * Math.cos((y0 * Math.PI) / 180), (y1 - y0) * 111320);
+}
 
 const svgUri = (svg) => "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
 
@@ -76,8 +92,11 @@ export default function App() {
   const zonesRef = useRef([]);
   const mapRef = useRef(null);
   const markersRef = useRef([]);
-  const circlesRef = useRef([]);
-  const facilityCirclesRef = useRef([]);
+  const zoneAreasRef = useRef([]); // 직접 등록한 비흡연구역의 범위
+  const facilityAreasRef = useRef([]); // 규칙으로 찾은 금연시설의 범위
+  const facilityBadgesRef = useRef([]);
+  const areaPolysRef = useRef([]);
+  const areasKeyRef = useRef("");
   const facilityReqRef = useRef(0);
   const infoRef = useRef(null);
   const searchMarkerRef = useRef(null); // 검색으로 고른 위치 표시
@@ -85,52 +104,131 @@ export default function App() {
   const routeOverlaysRef = useRef([]); // 길찾기 경로 선
   const myLocRef = useRef(null); // 내 위치 파란 점
 
-  // 법정 금연시설(버스정류장 등)을 카카오 장소 검색으로 찾아 점선 원으로 표시
+  // 구역 배지를 눌렀을 때 보여줄 말풍선: 구역에 속한 시설 목록과 적용 기준
+  const openAreaInfo = (members, marker) => {
+    const facilities = members.filter((m) => m.badge !== false);
+    const shown = facilities.slice(0, 6);
+    const el = document.createElement("div");
+    el.className = "info";
+    const title = document.createElement("b");
+    title.textContent = facilities.length > 1 ? `금연구역 (시설 ${facilities.length}곳)` : `${facilities[0].name} · ${facilities[0].label} 금연구역`;
+    el.append(title);
+    if (facilities.length > 1) {
+      const ul = document.createElement("ul");
+      ul.className = "area-list";
+      shown.forEach((m) => {
+        const li = document.createElement("li");
+        li.textContent = `${m.name} (${m.label}${m.exact ? "" : " · 범위 추정"})`;
+        ul.append(li);
+      });
+      if (facilities.length > shown.length) {
+        const li = document.createElement("li");
+        li.textContent = `외 ${facilities.length - shown.length}곳`;
+        ul.append(li);
+      }
+      el.append(ul);
+    }
+    // 적용 기준은 종류별로 한 번씩만
+    const rules = [...new Map(facilities.map((m) => [m.rule + m.source, m])).values()];
+    rules.forEach((m) => {
+      const small = document.createElement("small");
+      small.textContent = `${facilities.length > 1 ? `${m.label}: ` : ""}${m.rule} · 근거: ${m.source}`;
+      el.append(document.createElement("br"), small);
+    });
+    const note = document.createElement("small");
+    note.className = "muted";
+    const exactCount = facilities.filter((m) => m.exact).length;
+    note.textContent =
+      exactCount === facilities.length
+        ? "※ 시설 경계선(OpenStreetMap)을 기준으로 계산한 범위입니다"
+        : exactCount === 0
+          ? "※ 시설의 정확한 경계를 몰라 위치 기준으로 추정한 범위입니다"
+          : "※ 일부 시설은 경계선 대신 위치 기준으로 추정한 범위입니다";
+    el.append(document.createElement("br"), note);
+    setSelectedId(null);
+    infoRef.current.setContent(el);
+    infoRef.current.open(mapRef.current, marker);
+  };
+
+  // 모든 금연 범위를 하나의 구역으로 합쳐 그림: 겹치는 부분의 선은 없애고, 구역마다 배지는 하나만 둠
+  const drawAreas = () => {
+    const map = mapRef.current;
+    const areas = [...zoneAreasRef.current, ...facilityAreasRef.current];
+    // 지도를 움직여도 범위가 그대로면 다시 그리지 않음 (열려 있는 말풍선이 닫히지 않도록)
+    // 배지는 많이 확대했을 때(레벨 2 이하)만 표시. 그보다 넓게 볼 때는 범위만 보여줌 (배지가 너무 빽빽해서)
+    const showBadges = map.getLevel() <= BADGE_MAX_LEVEL;
+    const key = JSON.stringify([showBadges, areas.map((a) => [a.lat, a.lng, a.name])]);
+    if (key === areasKeyRef.current) return;
+    areasKeyRef.current = key;
+
+    areaPolysRef.current.forEach((p) => p.setMap(null));
+    areaPolysRef.current = [];
+    facilityBadgesRef.current.forEach((b) => b.setMap(null));
+    facilityBadgesRef.current = [];
+
+    const { shape, clusters } = buildAreas(areas);
+    shape.forEach((rings) =>
+      areaPolysRef.current.push(
+        new kakao.maps.Polygon({
+          map,
+          // 첫 링은 바깥 테두리, 나머지는 구멍
+          path: rings.map((ring) => ring.map(([lng, lat]) => new kakao.maps.LatLng(lat, lng))),
+          strokeWeight: 1.5,
+          strokeColor: COLORS.nonsmoking,
+          strokeOpacity: 0.7,
+          fillColor: COLORS.nonsmoking,
+          fillOpacity: 0.08,
+          zIndex: 0,
+        })
+      )
+    );
+    if (!showBadges) return;
+    clusters.forEach(({ members, at }) => {
+      if (!at) return;
+      const badge = new kakao.maps.Marker({
+        map,
+        position: new kakao.maps.LatLng(at.lat, at.lng),
+        image: badgeImage(kakao),
+        zIndex: 0,
+      });
+      kakao.maps.event.addListener(badge, "click", () => openAreaInfo(members, badge));
+      facilityBadgesRef.current.push(badge);
+    });
+  };
+
+  // 금연 규칙 대상 시설을 DB(서버)에서 불러와 금연 범위로 표시. 축소/확대와 상관없이 지도에 보이는 영역 전체가 대상
   const fetchFacilities = async () => {
     const map = mapRef.current;
     const reqId = ++facilityReqRef.current;
-    const clear = () => {
-      facilityCirclesRef.current.forEach((c) => c.setMap(null));
-      facilityCirclesRef.current = [];
-    };
-    if (!map || !flagsRef.current.showNon || map.getLevel() > 5) return clear();
-
-    const bounds = map.getBounds();
-    const results = await Promise.all(
-      FACILITY_TYPES.map(async (t) => ({ t, places: (await searchAll(kakao, t.keyword, bounds)).filter(t.match) }))
-    );
+    if (!map || !flagsRef.current.showNon) {
+      facilityAreasRef.current = [];
+      return drawAreas();
+    }
+    const b = map.getBounds();
+    const sw = b.getSouthWest();
+    const ne = b.getNorthEast();
+    const qs = new URLSearchParams({ south: sw.getLat(), west: sw.getLng(), north: ne.getLat(), east: ne.getLng() });
+    const rows = await fetch(`/api/facilities?${qs}`).then((r) => r.json());
     if (reqId !== facilityReqRef.current) return; // 더 최근 요청이 있으면 버림
 
-    clear();
-    const seen = new Set();
-    for (const { t, places } of results) {
-      for (const p of places) {
-        if (seen.has(p.id)) continue;
-        seen.add(p.id);
-        const center = new kakao.maps.LatLng(p.y, p.x);
-        const circle = new kakao.maps.Circle({
-          map,
-          center,
-          radius: t.radius,
-          strokeWeight: 1.5,
-          strokeColor: COLORS.nonsmoking,
-          strokeStyle: "dash",
-          strokeOpacity: 0.6,
-          fillColor: COLORS.nonsmoking,
-          fillOpacity: 0.06,
-          zIndex: 0,
-        });
-        const badge = new kakao.maps.Marker({ map, position: center, image: badgeImage(kakao), title: p.place_name, zIndex: 0 });
-        kakao.maps.event.addListener(badge, "click", () => {
-          const el = document.createElement("div");
-          el.className = "info";
-          el.textContent = `${p.place_name} · 금연구역(추정) 반경 ${t.radius}m`;
-          infoRef.current.setContent(el);
-          infoRef.current.open(map, badge);
-        });
-        facilityCirclesRef.current.push(circle, badge);
-      }
+    // 화면에서 1픽셀이 몇 m인지: 몇 픽셀도 안 되는 작은 범위는 그려도 보이지 않으니 건너뜀 (축소했을 때 성능)
+    const widthM = (ne.getLng() - sw.getLng()) * 111320 * Math.cos((sw.getLat() * Math.PI) / 180);
+    const mpp = widthM / (document.getElementById("map").clientWidth || 800);
+    let areas = [];
+    for (const f of rows) {
+      const t = RULE_BY_KEY[f.type_key];
+      if (!t || t.hidden || (t.include && !t.include(f.name))) continue;
+      const size = extentM(f);
+      if (size / mpp < 3) continue;
+      areas.push({
+        lat: f.lat, lng: f.lng, r: f.r, area: f.area, size, name: f.name, label: t.label, rule: t.rule, source: t.source, basis: t.basis,
+        exact: !!f.area, // 경계선을 알고 있는지
+        badge: !!f.area || f.r > 15, // 작은 범위(출입구, 정류장 등)는 배지 없이 범위만 표시
+      });
     }
+    if (areas.length > 3000) areas = areas.sort((a, b) => b.size - a.size).slice(0, 3000);
+    facilityAreasRef.current = areas;
+    drawAreas();
   };
 
   const fetchZones = async () => {
@@ -156,24 +254,11 @@ export default function App() {
     const { showSmoking, showNon } = flagsRef.current;
     const zones = zonesRef.current.filter((z) => (z.type === "smoking" ? showSmoking : showNon));
     markersRef.current.forEach((m) => m.setMap(null));
-    circlesRef.current.forEach((c) => c.setMap(null));
-    // 비흡연구역은 반경(radius_m)만큼 원으로 범위 표시
-    circlesRef.current = zones
+    // 비흡연구역은 반경(radius_m)만큼의 범위를 금연 범위에 포함
+    zoneAreasRef.current = zones
       .filter((z) => z.type === "nonsmoking" && z.radius_m)
-      .map(
-        (z) =>
-          new kakao.maps.Circle({
-            map,
-            center: new kakao.maps.LatLng(z.lat, z.lng),
-            radius: z.radius_m,
-            strokeWeight: 1.5,
-            strokeColor: COLORS.nonsmoking,
-            strokeOpacity: 0.55,
-            fillColor: COLORS.nonsmoking,
-            fillOpacity: 0.08,
-            zIndex: 1,
-          })
-      );
+      .map((z) => ({ lat: z.lat, lng: z.lng, r: z.radius_m, name: z.name, basis: "law", badge: false })); // 이미 핀이 있어 배지는 생략
+    drawAreas();
     markersRef.current = zones.map((z) => {
       const marker = new kakao.maps.Marker({
         map,
@@ -318,14 +403,17 @@ export default function App() {
   useEffect(() => {
     if (!kakao) return;
     const map = new kakao.maps.Map(document.getElementById("map"), {
-      center: new kakao.maps.LatLng(37.4175, 126.9774),
-      level: 4,
+      center: new kakao.maps.LatLng(37.4990, 127.0560), // 강남구 한가운데 (지역을 바꾸려면 이 좌표와 backend/facilities_tool.py 의 REGIONS 를 같이 바꿈)
+      level: 6,
     });
     mapRef.current = map;
     infoRef.current = new kakao.maps.InfoWindow({ removable: true });
+    let timer;
     kakao.maps.event.addListener(map, "idle", () => {
       fetchZones();
-      fetchFacilities();
+      // 시설 검색은 호출이 많아서, 지도 이동이 멈춘 뒤 한 번만 실행
+      clearTimeout(timer);
+      timer = setTimeout(fetchFacilities, 400);
     });
     fetchZones();
     fetchFacilities();
@@ -392,6 +480,7 @@ export default function App() {
           {sidebarOpen ? "◀" : "▶"}
         </button>
       </aside>
+      <div className="credit">경계선: © OpenStreetMap contributors</div>
       {selectedId && <ZonePanel zoneId={selectedId} onClose={() => setSelectedId(null)} />}
       {rouletteOpen && <Roulette onClose={() => setRouletteOpen(false)} />}
       {/* 지도 위 금연 안내: 평소엔 오른쪽 아래 1개(닫기 가능), 흡연모드면 위쪽 띠 + 왼쪽 아래까지 더 띄움 */}
