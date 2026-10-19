@@ -3,6 +3,7 @@ import { useKakao } from "./useKakaoMap.js";
 import { RULE_BY_KEY } from "./facilities.js";
 import ZonePanel from "./ZonePanel.jsx";
 import { buildAreas } from "./areas.js";
+import LoginButton from "./LoginButton.jsx";
 
 // 흡연자 기준 색: 피워도 되는 곳(흡연구역)은 초록, 피우면 안 되는 곳(금연구역)은 빨강. styles.css 의 --smoking / --nonsmoking 과 같은 값
 const COLORS = { smoking: "#1f9d55", nonsmoking: "#e5484d" };
@@ -311,6 +312,7 @@ export default function App() {
       <div id="map" />
       {showNon && zoomLevel > AREA_MAX_LEVEL && <div className="hint">금연구역은 지도를 더 확대하면 보여요</div>}
       <div className="credit">경계선: © OpenStreetMap contributors</div>
+      <LoginButton className="absolute top-3.5 right-3.5 z-10" /> {/* 임시: 위치는 팀과 정함 */}
       {selectedId && <ZonePanel zoneId={selectedId} onClose={() => setSelectedId(null)} />}
       <div className={`fab-group ${menuOpen ? "open" : ""}`}>
         <button
