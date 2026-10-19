@@ -1,29 +1,24 @@
-"""회원가입/로그인: 회원 정보는 users.csv, 로그인 표(token)는 서버 메모리에 보관
+"""로그인 도우미: 비밀번호 해시, 로그인 표(token), 요청 모양 (라우트는 main.py)
 
+회원 정보는 zones.db의 users 표에, 표 목록은 서버 메모리에 보관합니다.
 표 목록은 메모리에만 있으므로 서버를 다시 켜면 모두 로그아웃됩니다.
 """
-import csv
 import hashlib
 import hmac
 import re
 import secrets
 import threading
-from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field, field_validator
 
-USERS_PATH = Path(__file__).parent / "users.csv"
-FIELDS = ["nickname", "user_id", "password_hash"]
 USER_ID_RE = re.compile(r"^[a-z0-9_]{4,20}$")
 HASH_ITERATIONS = 600_000
 
-_users_lock = threading.Lock()  # 동시에 가입해도 중복 저장되지 않게
 _tokens: dict[str, dict] = {}  # 표 -> {"user_id", "nickname"}
 _tokens_lock = threading.Lock()
 
-router = APIRouter(prefix="/api/auth", tags=["auth"])
 bearer = HTTPBearer(auto_error=False)  # 표가 없을 때 403 대신 직접 401을 내려고 끔
 
 
@@ -46,29 +41,17 @@ def verify_password(password: str, stored: str) -> bool:
     return hmac.compare_digest(digest.hex(), digest_hex)
 
 
-# ---------- users.csv ----------
-def read_users() -> list[dict]:
-    if not USERS_PATH.exists():
-        return []
-    with USERS_PATH.open(encoding="utf-8", newline="") as f:
-        return list(csv.DictReader(f))
-
-
-def append_user(user: dict) -> None:
-    is_new = not USERS_PATH.exists()
-    with USERS_PATH.open("a", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=FIELDS)
-        if is_new:
-            writer.writeheader()
-        writer.writerow(user)
-
-
 # ---------- 표(token) ----------
 def issue_token(user_id: str, nickname: str) -> str:
     token = secrets.token_urlsafe(32)
     with _tokens_lock:
         _tokens[token] = {"user_id": user_id, "nickname": nickname}
     return token
+
+
+def revoke_token(token: str) -> None:
+    with _tokens_lock:
+        _tokens.pop(token, None)
 
 
 def current_user(cred: HTTPAuthorizationCredentials | None = Depends(bearer)) -> dict:
@@ -111,39 +94,3 @@ class LoginIn(BaseModel):
     password: str = Field(min_length=1)
 
     _normalize_id = field_validator("user_id")(_lower_id)
-
-
-# ---------- 주소 ----------
-@router.post("/signup", status_code=201)
-def signup(body: SignupIn):
-    with _users_lock:
-        users = read_users()
-        if any(u["user_id"] == body.user_id for u in users):
-            raise HTTPException(409, "이미 쓰고 있는 아이디입니다")
-        if any(u["nickname"] == body.nickname for u in users):
-            raise HTTPException(409, "이미 쓰고 있는 닉네임입니다")
-        append_user({"nickname": body.nickname, "user_id": body.user_id, "password_hash": hash_password(body.password)})
-    token = issue_token(body.user_id, body.nickname)
-    return {"token": token, "nickname": body.nickname, "user_id": body.user_id}
-
-
-@router.post("/login")
-def login(body: LoginIn):
-    user = next((u for u in read_users() if u["user_id"] == body.user_id), None)
-    # 아이디가 없을 때와 비밀번호가 틀렸을 때 같은 문장 (어느 쪽인지 알려 주지 않음)
-    if not user or not verify_password(body.password, user["password_hash"]):
-        raise HTTPException(401, "아이디 또는 비밀번호가 맞지 않습니다")
-    token = issue_token(user["user_id"], user["nickname"])
-    return {"token": token, "nickname": user["nickname"], "user_id": user["user_id"]}
-
-
-@router.post("/logout")
-def logout(user: dict = Depends(current_user)):
-    with _tokens_lock:
-        _tokens.pop(user["token"], None)
-    return {"detail": "로그아웃되었습니다"}
-
-
-@router.get("/me")
-def me(user: dict = Depends(current_user)):
-    return {"nickname": user["nickname"], "user_id": user["user_id"]}
