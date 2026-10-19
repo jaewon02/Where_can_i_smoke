@@ -1,7 +1,9 @@
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 DB_PATH = Path(__file__).parent / "zones.db"
+USERS_DB_PATH = Path(__file__).parent / "users.db"  # 회원 정보는 zones.db와 따로 보관
 
 
 def get_conn() -> sqlite3.Connection:
@@ -53,6 +55,17 @@ def init_db() -> None:
             """
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_reviews_zone ON reviews (zone_id)")
+
+
+# ---------- 회원 정보 (users.db) ----------
+def get_users_conn() -> sqlite3.Connection:
+    conn = sqlite3.connect(USERS_DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def init_users_db() -> None:
+    with get_users_conn() as conn:
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS users (
@@ -64,3 +77,41 @@ def init_db() -> None:
             )
             """
         )
+
+
+def migrate_users_from_zones_db() -> None:
+    """예전에 zones.db에 있던 users 표를 users.db로 옮김 (옛 표가 없으면 아무것도 안 함)
+
+    users.db에 이미 있는 아이디는 건너뜀. 닉네임이 겹쳐 옮기지 못한 회원이 있으면
+    정보를 잃지 않도록 zones.db의 users 표를 지우지 않고 남겨 둠.
+    """
+    with closing(get_conn()) as zconn:
+        if not zconn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'users'"
+        ).fetchone():
+            return
+        old_users = zconn.execute(
+            "SELECT nickname, user_id, password_hash, created_at FROM users ORDER BY id"
+        ).fetchall()
+
+    moved, skipped, failed = 0, 0, []
+    with closing(get_users_conn()) as uconn, uconn:  # 모두 넣은 뒤 한 번에 커밋
+        for u in old_users:
+            if uconn.execute("SELECT 1 FROM users WHERE user_id = ?", (u["user_id"],)).fetchone():
+                skipped += 1
+                continue
+            try:
+                uconn.execute(
+                    "INSERT INTO users (nickname, user_id, password_hash, created_at) VALUES (?,?,?,?)",
+                    (u["nickname"], u["user_id"], u["password_hash"], u["created_at"]),
+                )
+                moved += 1
+            except sqlite3.IntegrityError:  # 다른 아이디가 같은 닉네임을 이미 쓰는 경우
+                failed.append(u["user_id"])
+
+    if failed:
+        print(f"[users 옮기기] 닉네임이 겹쳐 옮기지 못한 아이디: {failed} — zones.db의 users 표를 남겨 둡니다")
+        return
+    with closing(get_conn()) as zconn, zconn:
+        zconn.execute("DROP TABLE users")
+    print(f"[users 옮기기] zones.db → users.db: {moved}명 옮김, {skipped}명 건너뜀, zones.db의 users 표 삭제")

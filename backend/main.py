@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from auth import LoginIn, SignupIn, current_user, hash_password, issue_token, revoke_token, verify_password
-from db import get_conn, init_db
+from db import get_conn, get_users_conn, init_db, init_users_db, migrate_users_from_zones_db
 
 UPLOAD_DIR = Path(__file__).parent / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
@@ -28,6 +28,8 @@ app.mount("/api/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 @app.on_event("startup")
 def startup() -> None:
     init_db()
+    init_users_db()
+    migrate_users_from_zones_db()
 
 
 def sniff_image_ext(data: bytes) -> str | None:
@@ -133,7 +135,7 @@ async def create_review(
 @app.post("/api/auth/signup", status_code=201, tags=["auth"])
 def signup(body: SignupIn):
     password_hash = hash_password(body.password)  # 시간이 걸리므로 DB를 열기 전에 계산
-    with get_conn() as conn:
+    with get_users_conn() as conn:
         if conn.execute("SELECT 1 FROM users WHERE user_id = ?", (body.user_id,)).fetchone():
             raise HTTPException(409, "이미 쓰고 있는 아이디입니다")
         if conn.execute("SELECT 1 FROM users WHERE nickname = ?", (body.nickname,)).fetchone():
@@ -151,7 +153,7 @@ def signup(body: SignupIn):
 
 @app.post("/api/auth/login", tags=["auth"])
 def login(body: LoginIn):
-    with get_conn() as conn:
+    with get_users_conn() as conn:
         user = conn.execute(
             "SELECT nickname, user_id, password_hash FROM users WHERE user_id = ?", (body.user_id,)
         ).fetchone()
