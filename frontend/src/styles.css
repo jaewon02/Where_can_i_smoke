@@ -155,6 +155,8 @@ body { margin: 0; font-family: system-ui, "Noto Sans KR", sans-serif; }
 .zone-list { flex: 1; min-height: 0; overflow-y: auto; border-top: 8px solid #f4f4f4; }
 .zl-head { position: sticky; top: 0; z-index: 1; padding: 14px 18px 10px; background: #fff; border-bottom: 1px solid #eee; }
 .zl-head h3 { margin: 0; font-size: 15px; }
+/* Tailwind preflight가 제목 굵기를 없애므로 사이드바·룰렛 제목은 직접 굵게 */
+.zl-head h3, .route-head h2, .roulette h2 { font-weight: 700; }
 .zl-head h3 b { color: #e5484d; }
 .zl-head small { display: block; margin-top: 2px; }
 .zl-msg { margin: 0; padding: 14px 18px; font-size: 13px; color: #777; line-height: 1.5; }
@@ -178,10 +180,11 @@ body { margin: 0; font-family: system-ui, "Noto Sans KR", sans-serif; }
 /* 사이드바 화면 (검색 / 길찾기) */
 .sidebar-pane { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .sidebar-pane[hidden] { display: none; }
+.sidebar-actions { display: flex; gap: 8px; margin: 14px 14px 0; flex: none; }
 .route-entry {
-  display: flex; align-items: center; gap: 8px; margin: 14px 14px 0; padding: 11px 14px;
+  flex: 1; display: flex; align-items: center; gap: 8px; padding: 11px 14px;
   border: none; border-radius: 12px; background: #1e88e5; color: #fff;
-  font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; flex: none;
+  font: inherit; font-size: 15px; font-weight: 600; cursor: pointer;
 }
 .route-entry:hover { background: #1976d2; }
 .route-entry:focus-visible { outline: 3px solid #90caf9; outline-offset: 2px; }
@@ -299,3 +302,47 @@ body { margin: 0; font-family: system-ui, "Noto Sans KR", sans-serif; }
     @apply bg-background text-foreground; }
   html {
     @apply font-sans; } }
+
+/* 오늘의 담배 룰렛 */
+.roulette-entry {
+  display: flex; align-items: center; gap: 6px; padding: 11px 14px; border: 1.5px solid #e5484d;
+  border-radius: 12px; background: #fff; color: #e5484d; font: inherit; font-size: 14px; font-weight: 600;
+  cursor: pointer; white-space: nowrap; flex: none;
+}
+.roulette-entry:hover { background: #fff3f3; }
+.roulette-entry:focus-visible { outline: 3px solid #90caf9; outline-offset: 2px; }
+.modal-backdrop {
+  position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; padding: 16px;
+  background: rgba(0,0,0,.45); animation: fade-in .15s ease-out;
+}
+@keyframes fade-in { from { opacity: 0; } }
+.roulette {
+  position: relative; width: 360px; max-width: 100%; padding: 22px 20px 20px; border-radius: 16px;
+  background: #fff; text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,.3);
+}
+.roulette h2 { margin: 0 0 4px; font-size: 20px; }
+.roulette .muted { margin: 0 0 14px; }
+.slot {
+  position: relative; height: 168px; overflow: hidden; margin: 0 auto; border-radius: 14px;
+  background: #1c1c1e; box-shadow: inset 0 0 0 3px #e5484d, inset 0 6px 14px rgba(0,0,0,.6);
+}
+.slot-reel { list-style: none; margin: 0; padding: 0; will-change: transform; }
+.slot-reel li {
+  height: 56px; display: grid; place-items: center; padding: 0 12px;
+  color: #fff; font-size: 19px; font-weight: 700; white-space: nowrap;
+}
+.slot.spinning .slot-reel { filter: blur(.6px); }
+/* 위아래는 어둡게, 가운데 칸만 또렷하게 */
+.slot::before, .slot::after { content: ""; position: absolute; left: 0; right: 0; height: 56px; z-index: 1; pointer-events: none; }
+.slot::before { top: 0; background: linear-gradient(#1c1c1e, rgba(28,28,30,.35)); }
+.slot::after { bottom: 0; background: linear-gradient(rgba(28,28,30,.35), #1c1c1e); }
+.slot-frame {
+  position: absolute; left: 8px; right: 8px; top: 56px; height: 56px; z-index: 2; pointer-events: none;
+  border-top: 2px solid #f5b301; border-bottom: 2px solid #f5b301;
+}
+.slot.done .slot-frame { background: rgba(245,179,1,.12); animation: slot-pop .4s ease-out; }
+@keyframes slot-pop { 50% { transform: scale(1.04); } }
+@media (prefers-reduced-motion: reduce) { .slot.done .slot-frame { animation: none; } .slot.spinning .slot-reel { filter: none; } }
+.roulette-result { min-height: 30px; margin: 14px 0 4px; font-size: 16px; }
+.roulette-result b { color: #e5484d; font-size: 19px; }
+@media (prefers-reduced-motion: reduce) { .modal-backdrop { animation: none; } }

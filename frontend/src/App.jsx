@@ -5,6 +5,7 @@ import ZonePanel from "./ZonePanel.jsx";
 import SearchBox from "./SearchBox.jsx";
 import ZoneList from "./ZoneList.jsx";
 import RoutePanel from "./RoutePanel.jsx";
+import Roulette from "./Roulette.jsx";
 
 const COLORS = { smoking: "#e5484d", nonsmoking: "#1f9d55" };
 
@@ -63,6 +64,7 @@ export default function App() {
   const [sidebarMode, setSidebarMode] = useState("search"); // "search" | "route"
   const [searchedPlace, setSearchedPlace] = useState(null); // 길찾기 출발지 후보
   const [myPos, setMyPos] = useState({ status: "idle" }); // 내 위치 { status, lat, lng, message }
+  const [rouletteOpen, setRouletteOpen] = useState(false); // 오늘의 담배 룰렛
   const [selectedId, setSelectedId] = useState(null); // 오른쪽 상세 패널에 보여줄 구역
   const [showSmoking, setShowSmoking] = useState(true);
   const [showNon, setShowNon] = useState(true); // 비흡연구역 + 주변 금연시설
@@ -356,10 +358,15 @@ export default function App() {
         )}
         {/* 검색 화면은 길찾기 중에도 상태(검색어·결과)를 유지하도록 숨기기만 함 */}
         <div className="sidebar-pane" hidden={sidebarMode !== "search"}>
-          <button className="route-entry" onClick={() => setSidebarMode("route")}>
-            <span aria-hidden="true">🚶</span> 길찾기
-            <span className="route-entry-arrow" aria-hidden="true">›</span>
-          </button>
+          <div className="sidebar-actions">
+            <button className="route-entry" onClick={() => setSidebarMode("route")}>
+              <span aria-hidden="true">🚶</span> 길찾기
+              <span className="route-entry-arrow" aria-hidden="true">›</span>
+            </button>
+            <button className="roulette-entry" onClick={() => setRouletteOpen(true)}>
+              <span aria-hidden="true">🎯</span> 오늘의 담배
+            </button>
+          </div>
           <SearchBox kakao={kakao} getCenter={() => mapRef.current?.getCenter()} onSelect={goToPlace} onClear={clearSearch}>
             <ZoneList zones={visibleSmoking} origin={listOrigin} selectedId={selectedId} hidden={!showSmoking} onPick={pickZone} />
           </SearchBox>
@@ -375,6 +382,7 @@ export default function App() {
         </button>
       </aside>
       {selectedId && <ZonePanel zoneId={selectedId} onClose={() => setSelectedId(null)} />}
+      {rouletteOpen && <Roulette onClose={() => setRouletteOpen(false)} />}
       <div className={`fab-group ${menuOpen ? "open" : ""}`}>
         <button
           className="fab main"
