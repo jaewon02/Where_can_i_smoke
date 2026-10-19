@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { useKakao } from "./useKakaoMap.js";
 import { FACILITY_TYPES, searchAll } from "./facilities.js";
 import ZonePanel from "./ZonePanel.jsx";
+import SearchBox from "./SearchBox.jsx";
+import ZoneList from "./ZoneList.jsx";
+import RoutePanel from "./RoutePanel.jsx";
 
 const COLORS = { smoking: "#e5484d", nonsmoking: "#1f9d55" };
 
@@ -54,6 +57,12 @@ function CigaretteIcon({ slash = false }) {
 export default function App() {
   const { kakao, error } = useKakao();
   const [menuOpen, setMenuOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(true); // 왼쪽 검색 사이드바
+  const [visibleSmoking, setVisibleSmoking] = useState([]); // 사이드바 목록: 화면 안 흡연구역
+  const [listOrigin, setListOrigin] = useState(null); // 목록 거리 기준: 검색으로 고른 장소 (없으면 거리 표시 안 함)
+  const [sidebarMode, setSidebarMode] = useState("search"); // "search" | "route"
+  const [searchedPlace, setSearchedPlace] = useState(null); // 길찾기 출발지 후보
+  const [myPos, setMyPos] = useState({ status: "idle" }); // 내 위치 { status, lat, lng, message }
   const [selectedId, setSelectedId] = useState(null); // 오른쪽 상세 패널에 보여줄 구역
   const [showSmoking, setShowSmoking] = useState(true);
   const [showNon, setShowNon] = useState(true); // 비흡연구역 + 주변 금연시설
@@ -66,6 +75,10 @@ export default function App() {
   const facilityCirclesRef = useRef([]);
   const facilityReqRef = useRef(0);
   const infoRef = useRef(null);
+  const searchMarkerRef = useRef(null); // 검색으로 고른 위치 표시
+  const searchedPlaceRef = useRef(null); // 검색으로 고른 장소 (목록 거리 기준)
+  const routeOverlaysRef = useRef([]); // 길찾기 경로 선
+  const myLocRef = useRef(null); // 내 위치 파란 점
 
   // 법정 금연시설(버스정류장 등)을 카카오 장소 검색으로 찾아 점선 원으로 표시
   const fetchFacilities = async () => {
@@ -126,6 +139,10 @@ export default function App() {
     });
     zonesRef.current = await fetch(`/api/zones?${qs}`).then((r) => r.json());
     drawZones();
+    setVisibleSmoking(zonesRef.current.filter((z) => z.type === "smoking"));
+    // 검색한 장소가 화면 안에 있을 때만 그곳에서의 거리를 보여줌
+    const place = searchedPlaceRef.current;
+    setListOrigin(place && b.contain(new kakao.maps.LatLng(place.lat, place.lng)) ? place : null);
   };
 
   // 켜져 있는 종류만 마커/원으로 그림
@@ -183,6 +200,116 @@ export default function App() {
     });
   };
 
+  // 검색 결과로 지도 이동 (이동 후 idle 이벤트로 주변 구역이 다시 불러와짐)
+  const goToPlace = (place) => {
+    const map = mapRef.current;
+    if (!map) return;
+    const pos = new kakao.maps.LatLng(place.lat, place.lng);
+    infoRef.current.close();
+    setSelectedId(null);
+    searchMarkerRef.current?.setMap(null);
+    searchMarkerRef.current = new kakao.maps.Marker({ map, position: pos, title: place.name, zIndex: 2 });
+    searchedPlaceRef.current = place;
+    setSearchedPlace(place);
+    map.setLevel(3);
+    map.setCenter(pos);
+    // 좁은 화면에선 사이드바가 지도를 거의 가리므로 고르면 접음
+    if (window.matchMedia("(max-width: 600px)").matches) setSidebarOpen(false);
+  };
+
+  const clearSearch = () => {
+    searchMarkerRef.current?.setMap(null);
+    searchMarkerRef.current = null;
+    searchedPlaceRef.current = null;
+    setSearchedPlace(null);
+    setListOrigin(null);
+  };
+
+  // 브라우저 위치 권한으로 내 위치를 받아 파란 점으로 표시하고 그쪽으로 이동
+  const locate = () => {
+    if (!navigator.geolocation) {
+      return setMyPos({ status: "error", message: "이 브라우저는 위치 확인을 지원하지 않아요." });
+    }
+    setMyPos((p) => ({ ...p, status: "loading" }));
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        const { latitude: lat, longitude: lng } = coords;
+        setMyPos({ status: "ok", lat, lng });
+        const map = mapRef.current;
+        const pos = new kakao.maps.LatLng(lat, lng);
+        myLocRef.current?.setMap(null);
+        const dot = document.createElement("div");
+        dot.className = "my-loc";
+        dot.title = "내 위치";
+        myLocRef.current = new kakao.maps.CustomOverlay({ map, position: pos, content: dot, zIndex: 4 });
+        map.setLevel(4);
+        map.setCenter(pos);
+      },
+      (err) =>
+        setMyPos({
+          status: "error",
+          message:
+            err.code === err.PERMISSION_DENIED
+              ? "위치 권한이 거부됐어요. 주소창에서 위치 권한을 허용하거나, 검색한 장소에서 출발해 보세요."
+              : "내 위치를 확인하지 못했어요.",
+        }),
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+    );
+  };
+
+  const clearRoute = () => {
+    routeOverlaysRef.current.forEach((o) => o.setMap(null));
+    routeOverlaysRef.current = [];
+  };
+
+  // 경로(path: [[lat, lng], ...])를 파란 선으로 그리고, 출발/도착과 도로 사이 빈 구간은 점선으로 이음
+  const showRoute = (path, start, end, via) => {
+    const map = mapRef.current;
+    clearRoute();
+    const ll = ([lat, lng]) => new kakao.maps.LatLng(lat, lng);
+    const pts = path.map(ll);
+    const startPt = ll([start.lat, start.lng]);
+    const endPt = ll([end.lat, end.lng]);
+    const line = (p, dash) =>
+      new kakao.maps.Polyline({
+        map,
+        path: p,
+        strokeWeight: dash ? 3 : 6,
+        strokeColor: "#1e88e5",
+        strokeOpacity: dash ? 0.7 : 0.9,
+        strokeStyle: dash ? "shortdash" : "solid",
+        zIndex: 3,
+      });
+    // 출발/도착 표시 (내 위치에서 출발하면 파란 점이 이미 있으므로 출발 표시는 생략)
+    const pin = (pos, kind, label) => {
+      const el = document.createElement("div");
+      el.className = `route-pin ${kind}`;
+      el.textContent = label;
+      return new kakao.maps.CustomOverlay({ map, position: pos, content: el, yAnchor: 1.3, zIndex: 5 });
+    };
+    routeOverlaysRef.current = [
+      ...(pts.length
+        ? [line(pts), line([startPt, pts[0]], true), line([pts[pts.length - 1], endPt], true)]
+        : [line([startPt, endPt], true)]),
+      ...(start.isMe ? [] : [pin(startPt, "start", "출발")]),
+      pin(endPt, "end", "도착"),
+      ...(via ? [pin(ll([via.lat, via.lng]), "via", "흡연")] : []),
+    ];
+
+    const bounds = new kakao.maps.LatLngBounds();
+    [startPt, endPt, ...pts].forEach((p) => bounds.extend(p));
+    // 넓은 화면에선 왼쪽 사이드바에 가리지 않게 여백을 더 줌
+    const left = window.matchMedia("(min-width: 601px)").matches ? 400 : 40;
+    map.setBounds(bounds, 60, 60, 60, left);
+  };
+
+  // 사이드바 목록에서 흡연구역을 고르면 오른쪽 상세 패널 열기 (목록은 화면 안 구역이라 지도는 그대로)
+  const pickZone = (z) => {
+    infoRef.current.close();
+    setSelectedId(z.id);
+    if (window.matchMedia("(max-width: 600px)").matches) setSidebarOpen(false);
+  };
+
   useEffect(() => {
     if (!kakao) return;
     const map = new kakao.maps.Map(document.getElementById("map"), {
@@ -209,8 +336,44 @@ export default function App() {
   if (error) return <div className="error">{error.message}</div>;
 
   return (
-    <div className="app">
+    <div className={`app ${sidebarOpen ? "sidebar-open" : ""}`}>
       <div id="map" />
+      <aside className={`sidebar ${sidebarOpen ? "open" : ""}`} aria-label="검색과 길찾기">
+        {sidebarMode === "route" && (
+          <RoutePanel
+            kakao={kakao}
+            getCenter={() => mapRef.current?.getCenter()}
+            myPos={myPos}
+            searchedPlace={searchedPlace}
+            onLocate={locate}
+            onShowRoute={showRoute}
+            onClearRoute={clearRoute}
+            onBack={() => {
+              clearRoute();
+              setSidebarMode("search");
+            }}
+          />
+        )}
+        {/* 검색 화면은 길찾기 중에도 상태(검색어·결과)를 유지하도록 숨기기만 함 */}
+        <div className="sidebar-pane" hidden={sidebarMode !== "search"}>
+          <button className="route-entry" onClick={() => setSidebarMode("route")}>
+            <span aria-hidden="true">🚶</span> 길찾기
+            <span className="route-entry-arrow" aria-hidden="true">›</span>
+          </button>
+          <SearchBox kakao={kakao} getCenter={() => mapRef.current?.getCenter()} onSelect={goToPlace} onClear={clearSearch}>
+            <ZoneList zones={visibleSmoking} origin={listOrigin} selectedId={selectedId} hidden={!showSmoking} onPick={pickZone} />
+          </SearchBox>
+        </div>
+        <button
+          className="sidebar-tab"
+          onClick={() => setSidebarOpen((v) => !v)}
+          aria-expanded={sidebarOpen}
+          title={sidebarOpen ? "사이드바 접기" : "사이드바 펼치기"}
+          aria-label={sidebarOpen ? "사이드바 접기" : "사이드바 펼치기"}
+        >
+          {sidebarOpen ? "◀" : "▶"}
+        </button>
+      </aside>
       {selectedId && <ZonePanel zoneId={selectedId} onClose={() => setSelectedId(null)} />}
       <div className={`fab-group ${menuOpen ? "open" : ""}`}>
         <button

@@ -1,12 +1,20 @@
+import math
+import os
 import uuid
+from datetime import date
 from pathlib import Path
 from typing import Literal
+from urllib.parse import quote
 
+import httpx
+from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from db import get_conn, init_db
+
+load_dotenv(Path(__file__).parent / ".env")
 
 UPLOAD_DIR = Path(__file__).parent / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
@@ -48,12 +56,17 @@ def list_zones(
     type: Literal["smoking", "nonsmoking"] | None = None,
     limit: int = Query(500, le=2000),
 ):
-    sql = "SELECT * FROM zones WHERE lat BETWEEN ? AND ? AND lng BETWEEN ? AND ?"
+    # 목록에 보여줄 후기 수 / 평균 별점도 함께
+    sql = (
+        "SELECT z.*, COUNT(r.id) AS review_count, ROUND(AVG(r.rating), 1) AS avg_rating"
+        " FROM zones z LEFT JOIN reviews r ON r.zone_id = z.id"
+        " WHERE z.lat BETWEEN ? AND ? AND z.lng BETWEEN ? AND ?"
+    )
     params: list = [south, north, west, east]
     if type:
-        sql += " AND type = ?"
+        sql += " AND z.type = ?"
         params.append(type)
-    sql += " LIMIT ?"
+    sql += " GROUP BY z.id LIMIT ?"
     params.append(limit)
     with get_conn() as conn:
         return [dict(r) for r in conn.execute(sql, params)]
@@ -125,3 +138,116 @@ async def create_review(
             (UPLOAD_DIR / name).write_bytes(data)
             conn.execute("INSERT INTO review_photos (review_id, filename) VALUES (?,?)", (review_id, name))
     return {"id": review_id}
+
+
+# ---- 도보 길찾기 (TMAP 보행자 경로안내) ----
+# 무료 요금제는 하루 1,000건, 넘으면 TMAP이 차단하므로 캐시 + 자체 한도로 아껴 씀
+TMAP_URL = "https://apis.openapi.sk.com/tmap/routes/pedestrian?version=1"
+TMAP_DAILY_LIMIT = 950
+MAX_ROUTE_M = 10000  # 직선거리가 이보다 멀면 TMAP을 부르지 않음
+_route_cache: dict[tuple, dict] = {}
+_tmap_calls = {"date": date.today(), "count": 0}
+
+
+def straight_m(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    r = math.radians
+    h = math.sin(r(lat2 - lat1) / 2) ** 2 + math.cos(r(lat1)) * math.cos(r(lat2)) * math.sin(r(lng2 - lng1) / 2) ** 2
+    return 2 * 6371000 * math.asin(math.sqrt(h))
+
+
+MAX_DETOUR_M = 1500  # 흡연모드: 직선 기준으로 이보다 더 돌아가야 하는 흡연구역은 후보에서 제외
+
+
+def smoking_candidates(from_lat: float, from_lng: float, to_lat: float, to_lng: float, limit: int = 3) -> list[dict]:
+    """출발→도착 사이에 들르기 좋은 흡연구역 (직선 기준 덜 돌아가는 순)"""
+    pad = 0.015  # 약 1.5km
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, name, lat, lng FROM zones WHERE type = 'smoking'"
+            " AND lat BETWEEN ? AND ? AND lng BETWEEN ? AND ?",
+            (min(from_lat, to_lat) - pad, max(from_lat, to_lat) + pad,
+             min(from_lng, to_lng) - pad, max(from_lng, to_lng) + pad),
+        ).fetchall()
+    direct = straight_m(from_lat, from_lng, to_lat, to_lng)
+    out = []
+    for z in rows:
+        detour = straight_m(from_lat, from_lng, z["lat"], z["lng"]) + straight_m(z["lat"], z["lng"], to_lat, to_lng) - direct
+        if detour <= MAX_DETOUR_M:
+            out.append({**dict(z), "detour_m": round(detour)})
+    return sorted(out, key=lambda z: z["detour_m"])[:limit]
+
+
+async def tmap_route(key: str, from_lat: float, from_lng: float, to_lat: float, to_lng: float, via: dict | None) -> dict:
+    if _tmap_calls["date"] != date.today():
+        _tmap_calls.update(date=date.today(), count=0)
+    if _tmap_calls["count"] >= TMAP_DAILY_LIMIT:
+        raise HTTPException(429, "오늘 길찾기 사용량을 모두 썼어요. 내일 다시 시도해 주세요")
+    _tmap_calls["count"] += 1
+
+    body = {
+        "startX": str(from_lng), "startY": str(from_lat),
+        "endX": str(to_lng), "endY": str(to_lat),
+        "startName": quote("출발"), "endName": quote("도착"),
+        "reqCoordType": "WGS84GEO", "resCoordType": "WGS84GEO",
+    }
+    if via:
+        body["passList"] = f"{via['lng']},{via['lat']}"  # 경유지 (경도,위도)
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            res = await client.post(TMAP_URL, headers={"appKey": key}, json=body)
+    except httpx.HTTPError:
+        raise HTTPException(502, "길찾기 서버에 연결하지 못했습니다")
+    if res.status_code == 429:
+        raise HTTPException(429, "오늘 길찾기 사용량을 모두 썼어요. 내일 다시 시도해 주세요")
+    if res.status_code != 200:
+        msg = (res.json().get("error", {}).get("message") if "json" in res.headers.get("content-type", "") else None)
+        raise HTTPException(502, f"경로를 찾지 못했습니다{f' ({msg})' if msg else ''}")
+
+    features = res.json().get("features", [])
+    if not features:
+        raise HTTPException(502, "경로를 찾지 못했습니다")
+    path: list[list[float]] = []
+    for f in features:
+        if f["geometry"]["type"] == "LineString":
+            for lng, lat in f["geometry"]["coordinates"]:
+                if not path or path[-1] != [lat, lng]:  # 구간 이음새 중복 제거
+                    path.append([lat, lng])
+    props = features[0]["properties"]
+    return {"distance_m": props.get("totalDistance"), "time_s": props.get("totalTime"), "path": path}
+
+
+@app.get("/api/route")
+async def walking_route(
+    from_lat: float = Query(..., ge=33, le=39),
+    from_lng: float = Query(..., ge=124, le=132),
+    to_lat: float = Query(..., ge=33, le=39),
+    to_lng: float = Query(..., ge=124, le=132),
+    smoking: bool = Query(False, description="흡연모드: 중간에 흡연구역을 들렀다 감"),
+    via_zone_id: int | None = Query(None, description="흡연모드에서 들를 흡연구역을 직접 고를 때"),
+):
+    """출발 → (흡연구역) → 도착 도보 경로. path는 [[lat, lng], ...]"""
+    key = os.getenv("TMAP_APP_KEY", "").strip()
+    if not key:
+        raise HTTPException(503, "길찾기 키가 설정되지 않았습니다 (backend/.env의 TMAP_APP_KEY)")
+
+    dist = straight_m(from_lat, from_lng, to_lat, to_lng)
+    if dist > MAX_ROUTE_M:
+        raise HTTPException(422, f"도보 길찾기는 직선 {MAX_ROUTE_M // 1000}km 이내만 안내해요")
+    if dist < 10:
+        raise HTTPException(422, "출발지와 도착지가 너무 가까워요")
+
+    via = None
+    candidates: list[dict] = []
+    if smoking:
+        candidates = smoking_candidates(from_lat, from_lng, to_lat, to_lng)
+        via = next((c for c in candidates if c["id"] == via_zone_id), None) if via_zone_id else None
+        via = via or (candidates[0] if candidates else None)
+
+    # 좌표를 약 10m 단위로 반올림해서 같은 요청은 캐시로 응답
+    cache_key = (round(from_lat, 4), round(from_lng, 4), round(to_lat, 4), round(to_lng, 4), via and via["id"])
+    if cache_key not in _route_cache:
+        _route_cache[cache_key] = await tmap_route(key, from_lat, from_lng, to_lat, to_lng, via)
+    result = {**_route_cache[cache_key], "via": via}
+    if smoking:
+        result["candidates"] = candidates  # 다른 흡연구역으로 바꿀 수 있게
+    return result

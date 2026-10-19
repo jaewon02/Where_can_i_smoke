@@ -90,3 +90,189 @@ body { margin: 0; font-family: system-ui, "Noto Sans KR", sans-serif; }
 .panel button:focus-visible, .panel input:focus-visible, .panel textarea:focus-visible { outline: 3px solid #1e88e5; outline-offset: 2px; }
 
 @media (max-width: 600px) { .panel { width: 100vw; } }
+
+/* 왼쪽 사이드바 (검색). 오른쪽 가장자리 탭으로 넣었다 뺐다 */
+.app { --sidebar-w: min(360px, calc(100vw - 40px)); }
+.sidebar {
+  position: absolute; top: 0; bottom: 0; left: 0; z-index: 15; width: var(--sidebar-w);
+  display: flex; flex-direction: column; background: #fff; box-shadow: 4px 0 18px rgba(0,0,0,.16);
+  transform: translateX(-100%); transition: transform .25s ease;
+}
+.sidebar.open { transform: none; }
+/* 접힌 뒤에는 검색창이 Tab 키 이동에 걸리지 않도록 숨김 (애니메이션 끝난 뒤) */
+.sidebar:not(.open) > :not(.sidebar-tab) { visibility: hidden; transition: visibility 0s .25s; }
+.sidebar-tab {
+  position: absolute; top: 50%; left: 100%; transform: translateY(-50%);
+  width: 24px; height: 56px; padding: 0; border: none; border-radius: 0 8px 8px 0;
+  background: #fff; color: #555; font-size: 12px; cursor: pointer; box-shadow: 4px 0 8px rgba(0,0,0,.16);
+}
+.sidebar-tab:hover { color: #000; }
+.sidebar-tab:focus-visible { outline: 3px solid #1e88e5; outline-offset: -3px; }
+.app.sidebar-open .fab-group { left: calc(var(--sidebar-w) + 14px); }
+.fab-group { transition: left .25s ease; }
+@media (prefers-reduced-motion: reduce) { .sidebar, .fab-group { transition: none; } }
+/* 좁은 화면에서는 사이드바가 버튼 위를 덮음 */
+@media (max-width: 600px) { .app.sidebar-open .fab-group { left: 14px; } }
+
+.search { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.search-bar {
+  display: flex; align-items: center; height: 48px; margin: 14px; padding: 0 4px 0 16px;
+  background: #fff; border: 1.5px solid #ddd; border-radius: 24px; flex: none;
+}
+.search-bar:focus-within { border-color: #1e88e5; box-shadow: 0 0 0 2px rgba(30,136,229,.25); }
+.search-bar input { flex: 1; min-width: 0; border: none; outline: none; font: inherit; font-size: 15px; background: none; }
+.search-bar input::-webkit-search-cancel-button { display: none; }
+.search-clear, .search-go {
+  width: 40px; height: 40px; border: none; border-radius: 50%; background: none;
+  display: grid; place-items: center; cursor: pointer; color: #666; flex: none;
+}
+.search-clear { font-size: 14px; color: #999; }
+.search-go:hover, .search-clear:hover { background: #f2f2f2; }
+.search-go:disabled { opacity: .5; cursor: wait; }
+.search-msg { margin: 0; padding: 14px 18px; font-size: 14px; color: #666; }
+.search-results { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; border-top: 1px solid #eee; }
+.search-results li { padding: 12px 18px; border-bottom: 1px solid #f2f2f2; cursor: pointer; }
+.search-results li.active { background: #f2f6fc; }
+.search-results li.chosen { box-shadow: inset 3px 0 0 #1e88e5; }
+.search-results .sr-top { display: flex; align-items: baseline; gap: 8px; }
+.search-results .sr-top b { font-size: 14px; font-weight: 600; }
+.search-results .sr-top .muted { font-size: 12px; white-space: nowrap; }
+.search-results small { display: block; margin-top: 3px; color: #777; font-size: 12px; }
+.search-toggle {
+  margin: 0; padding: 10px 18px; border: none; border-top: 1px solid #eee; background: #fafafa;
+  font: inherit; font-size: 13px; color: #555; text-align: left; cursor: pointer; flex: none;
+}
+.search-toggle:hover { background: #f2f2f2; }
+
+/* 사이드바: 화면 안 흡연구역 목록 */
+.zone-list { flex: 1; min-height: 0; overflow-y: auto; border-top: 8px solid #f4f4f4; }
+.zl-head { position: sticky; top: 0; z-index: 1; padding: 14px 18px 10px; background: #fff; border-bottom: 1px solid #eee; }
+.zl-head h3 { margin: 0; font-size: 15px; }
+.zl-head h3 b { color: #e5484d; }
+.zl-head small { display: block; margin-top: 2px; }
+.zl-msg { margin: 0; padding: 14px 18px; font-size: 13px; color: #777; line-height: 1.5; }
+.zone-list ul { list-style: none; margin: 0; padding: 0; }
+.zl-item {
+  display: block; width: 100%; padding: 12px 18px; border: none; border-bottom: 1px solid #f2f2f2;
+  background: none; font: inherit; text-align: left; cursor: pointer;
+}
+.zl-item:hover { background: #fafafa; }
+.zl-item.selected { background: #fff3f3; box-shadow: inset 3px 0 0 #e5484d; }
+.zl-item:focus-visible { outline: 3px solid #1e88e5; outline-offset: -3px; }
+.zl-top { display: flex; align-items: baseline; gap: 8px; }
+.zl-top b { font-size: 14px; font-weight: 600; }
+.zl-dist { margin-left: auto; font-size: 12px; font-weight: 600; color: #e5484d; white-space: nowrap; }
+.zl-addr { display: block; margin-top: 3px; color: #777; font-size: 12px; }
+.zl-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; font-size: 12px; }
+.zl-meta .muted { font-size: 12px; }
+.zl-star { color: #f5b301; font-weight: 600; }
+
+
+/* 사이드바 화면 (검색 / 길찾기) */
+.sidebar-pane { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.sidebar-pane[hidden] { display: none; }
+.route-entry {
+  display: flex; align-items: center; gap: 8px; margin: 14px 14px 0; padding: 11px 14px;
+  border: none; border-radius: 12px; background: #1e88e5; color: #fff;
+  font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; flex: none;
+}
+.route-entry:hover { background: #1976d2; }
+.route-entry:focus-visible { outline: 3px solid #90caf9; outline-offset: 2px; }
+.route-entry-arrow { margin-left: auto; font-size: 20px; line-height: 1; }
+
+/* 길찾기 화면 */
+.route { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.route-head { display: flex; align-items: center; gap: 6px; padding: 12px 14px 6px; flex: none; }
+.route-head h2 { margin: 0; font-size: 17px; }
+.route-back {
+  width: 36px; height: 36px; border: none; border-radius: 50%; background: none;
+  font-size: 20px; cursor: pointer; color: #444;
+}
+.route-back:hover { background: #f2f2f2; }
+.route-msg { margin: 0; padding: 4px 18px 10px; font-size: 13px; color: #666; line-height: 1.5; }
+.link-btn { margin-left: 6px; padding: 0; border: none; background: none; color: #1e88e5; font: inherit; font-size: 13px; cursor: pointer; text-decoration: underline; }
+.route-result { margin: 0 18px 12px; padding: 12px 14px; border-radius: 12px; background: #f2f6fc; flex: none; }
+.route-result.error { background: #fdf0f0; }
+.route-result .route-msg { padding: 0; }
+.rr-dest { font-size: 13px; color: #555; margin-bottom: 4px; }
+.rr-main { font-size: 16px; }
+.rr-main b { font-size: 22px; color: #1565c0; }
+.rr-foot { display: flex; align-items: center; margin-top: 6px; }
+.rr-foot .link-btn { margin-left: auto; }
+
+/* 내 위치 파란 점 */
+.my-loc {
+  width: 16px; height: 16px; border-radius: 50%; background: #1e88e5;
+  border: 3px solid #fff; box-shadow: 0 0 0 6px rgba(30,136,229,.25), 0 1px 4px rgba(0,0,0,.4);
+}
+
+/* 길찾기 출발/도착 입력 */
+.route-fields { display: flex; gap: 8px; padding: 4px 14px 12px; flex: none; }
+.route-inputs { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.route-swap {
+  align-self: center; width: 34px; height: 34px; border: 1.5px solid #ddd; border-radius: 50%;
+  background: #fff; color: #555; font-size: 16px; cursor: pointer; flex: none;
+}
+.route-swap:hover { background: #f2f2f2; }
+.place-input { position: relative; }
+.pi-row {
+  display: flex; align-items: center; height: 42px; padding: 0 4px 0 10px;
+  border: 1.5px solid #ddd; border-radius: 10px; background: #fff;
+}
+.pi-row:focus-within { border-color: #1e88e5; box-shadow: 0 0 0 2px rgba(30,136,229,.2); }
+.pi-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; margin-right: 8px; }
+.pi-dot.start { background: #1e88e5; }
+.pi-dot.end { background: #e5484d; }
+.pi-row input { flex: 1; min-width: 0; border: none; outline: none; font: inherit; font-size: 14px; background: none; }
+.pi-row input::-webkit-search-cancel-button { display: none; }
+.pi-row input.is-me { color: #1565c0; font-weight: 600; }
+.pi-btn {
+  height: 32px; padding: 0 8px; border: none; border-radius: 8px; background: none;
+  color: #1e88e5; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; flex: none;
+}
+.pi-btn:hover { background: #f2f6fc; }
+.pi-results {
+  position: absolute; left: 0; right: 0; top: 46px; z-index: 3; list-style: none; margin: 0; padding: 4px 0;
+  max-height: 280px; overflow-y: auto; background: #fff; border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,.2);
+}
+.pi-results li { padding: 9px 12px; cursor: pointer; }
+.pi-results li.active { background: #f2f6fc; }
+.pi-results li b { display: block; font-size: 13px; font-weight: 600; }
+.pi-results li small { color: #777; font-size: 12px; }
+.pi-results .pi-msg { padding: 10px 12px; font-size: 13px; color: #666; cursor: default; }
+.route-hint { margin: 0; padding: 4px 18px; font-size: 13px; color: #888; line-height: 1.6; }
+
+/* 지도 위 출발/도착 표시 */
+.route-pin {
+  padding: 3px 9px; border-radius: 12px; color: #fff; font-size: 12px; font-weight: 700;
+  border: 2px solid #fff; box-shadow: 0 1px 5px rgba(0,0,0,.35); white-space: nowrap;
+}
+.route-pin.start { background: #1e88e5; }
+.route-pin.end { background: #e5484d; }
+
+/* 흡연모드 스위치 */
+.smoke-toggle { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #666; cursor: pointer; }
+.smoke-toggle.on { color: #e5484d; font-weight: 600; }
+.smoke-toggle input { position: absolute; opacity: 0; pointer-events: none; }
+.st-track { position: relative; width: 36px; height: 20px; border-radius: 10px; background: #ccc; transition: background .15s; }
+.st-thumb {
+  position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.3); transition: transform .15s;
+}
+.smoke-toggle.on .st-track { background: #e5484d; }
+.smoke-toggle.on .st-thumb { transform: translateX(16px); }
+.smoke-toggle:focus-within .st-track { outline: 3px solid #90caf9; outline-offset: 1px; }
+@media (prefers-reduced-motion: reduce) { .st-track, .st-thumb { transition: none; } }
+
+/* 흡연모드 경유지 */
+.rr-via { margin-top: 6px; font-size: 13px; color: #333; }
+.rr-via.none { color: #888; }
+.rr-via-badge { display: inline-block; padding: 1px 7px; border-radius: 9px; background: #e5484d; color: #fff; font-size: 11px; font-weight: 700; }
+.rr-cands { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.rr-cands button {
+  max-width: 100%; padding: 4px 10px; border: 1.5px solid #ddd; border-radius: 14px; background: #fff;
+  font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.rr-cands button.on { border-color: #e5484d; color: #e5484d; font-weight: 600; }
+.route-pin.via { background: #e5484d; }
+.route-pin.end { background: #333; }
