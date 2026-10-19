@@ -90,3 +90,8 @@ body { margin: 0; font-family: system-ui, "Noto Sans KR", sans-serif; }
 .panel button:focus-visible, .panel input:focus-visible, .panel textarea:focus-visible { outline: 3px solid #1e88e5; outline-offset: 2px; }
 
 @media (max-width: 600px) { .panel { width: 100vw; } }
+
+.info .area-list { margin: 4px 0 6px; padding-left: 16px; font-size: 12px; line-height: 1.5; }
+.info small { font-size: 12px; }
+
+.credit { position: absolute; right: 8px; bottom: 4px; z-index: 5; font-size: 11px; color: #555; background: rgba(255,255,255,.75); padding: 1px 6px; border-radius: 4px; pointer-events: none; }
