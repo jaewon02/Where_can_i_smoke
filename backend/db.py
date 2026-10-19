@@ -53,3 +53,13 @@ def init_db() -> None:
             """
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_reviews_zone ON reviews (zone_id)")
+        # 주소 -> 좌표 변환 결과 캐시 (동기화를 다시 돌려도 카카오 API를 중복 호출하지 않음)
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS geocode_cache (
+                address TEXT PRIMARY KEY,
+                lat REAL,
+                lng REAL
+            )
+            """
+        )

@@ -90,23 +90,30 @@ export default function App() {
         if (seen.has(p.id)) continue;
         seen.add(p.id);
         const center = new kakao.maps.LatLng(p.y, p.x);
+        const byLaw = t.basis === "law";
         const circle = new kakao.maps.Circle({
           map,
           center,
           radius: t.radius,
           strokeWeight: 1.5,
           strokeColor: COLORS.nonsmoking,
-          strokeStyle: "dash",
-          strokeOpacity: 0.6,
+          strokeStyle: byLaw ? "solid" : "dash", // 법정 = 실선, 조례 = 점선
+          strokeOpacity: byLaw ? 0.7 : 0.5,
           fillColor: COLORS.nonsmoking,
-          fillOpacity: 0.06,
+          fillOpacity: byLaw ? 0.08 : 0.05,
           zIndex: 0,
         });
         const badge = new kakao.maps.Marker({ map, position: center, image: badgeImage(kakao), title: p.place_name, zIndex: 0 });
         kakao.maps.event.addListener(badge, "click", () => {
+          setSelectedId(null);
           const el = document.createElement("div");
           el.className = "info";
-          el.textContent = `${p.place_name} · 금연구역(추정) 반경 ${t.radius}m`;
+          el.innerHTML = `<b></b><br><small></small><br><small></small><br><small class="muted"></small>`;
+          el.querySelector("b").textContent = `${p.place_name} · ${t.label} 금연구역`;
+          const [s1, s2, s3] = el.querySelectorAll("small");
+          s1.textContent = t.rule;
+          s2.textContent = `근거: ${t.source}`;
+          s3.textContent = "※ 지도의 원은 시설 위치 기준 근사 범위입니다";
           infoRef.current.setContent(el);
           infoRef.current.open(map, badge);
         });
@@ -186,14 +193,17 @@ export default function App() {
   useEffect(() => {
     if (!kakao) return;
     const map = new kakao.maps.Map(document.getElementById("map"), {
-      center: new kakao.maps.LatLng(37.4175, 126.9774),
-      level: 4,
+      center: new kakao.maps.LatLng(37.5035, 127.1083), // 송파구 흡연구역이 모여 있는 곳
+      level: 6,
     });
     mapRef.current = map;
     infoRef.current = new kakao.maps.InfoWindow({ removable: true });
+    let timer;
     kakao.maps.event.addListener(map, "idle", () => {
       fetchZones();
-      fetchFacilities();
+      // 시설 검색은 호출이 많아서, 지도 이동이 멈춘 뒤 한 번만 실행
+      clearTimeout(timer);
+      timer = setTimeout(fetchFacilities, 400);
     });
     fetchZones();
     fetchFacilities();
