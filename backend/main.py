@@ -1,11 +1,13 @@
+import sqlite3
 import uuid
 from pathlib import Path
 from typing import Literal
 
-from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from auth import LoginIn, SignupIn, current_user, hash_password, issue_token, revoke_token, verify_password
 from db import get_conn, init_db
 
 UPLOAD_DIR = Path(__file__).parent / "uploads"
@@ -125,3 +127,47 @@ async def create_review(
             (UPLOAD_DIR / name).write_bytes(data)
             conn.execute("INSERT INTO review_photos (review_id, filename) VALUES (?,?)", (review_id, name))
     return {"id": review_id}
+
+
+# ---------- 회원가입/로그인 (도우미 함수는 auth.py) ----------
+@app.post("/api/auth/signup", status_code=201, tags=["auth"])
+def signup(body: SignupIn):
+    password_hash = hash_password(body.password)  # 시간이 걸리므로 DB를 열기 전에 계산
+    with get_conn() as conn:
+        if conn.execute("SELECT 1 FROM users WHERE user_id = ?", (body.user_id,)).fetchone():
+            raise HTTPException(409, "이미 쓰고 있는 아이디입니다")
+        if conn.execute("SELECT 1 FROM users WHERE nickname = ?", (body.nickname,)).fetchone():
+            raise HTTPException(409, "이미 쓰고 있는 닉네임입니다")
+        try:
+            conn.execute(
+                "INSERT INTO users (nickname, user_id, password_hash) VALUES (?,?,?)",
+                (body.nickname, body.user_id, password_hash),
+            )
+        except sqlite3.IntegrityError:  # 위 확인과 저장 사이에 같은 아이디/닉네임이 먼저 들어온 경우
+            raise HTTPException(409, "이미 쓰고 있는 아이디 또는 닉네임입니다")
+    token = issue_token(body.user_id, body.nickname)
+    return {"token": token, "nickname": body.nickname, "user_id": body.user_id}
+
+
+@app.post("/api/auth/login", tags=["auth"])
+def login(body: LoginIn):
+    with get_conn() as conn:
+        user = conn.execute(
+            "SELECT nickname, user_id, password_hash FROM users WHERE user_id = ?", (body.user_id,)
+        ).fetchone()
+    # 아이디가 없을 때와 비밀번호가 틀렸을 때 같은 문장 (어느 쪽인지 알려 주지 않음)
+    if not user or not verify_password(body.password, user["password_hash"]):
+        raise HTTPException(401, "아이디 또는 비밀번호가 맞지 않습니다")
+    token = issue_token(user["user_id"], user["nickname"])
+    return {"token": token, "nickname": user["nickname"], "user_id": user["user_id"]}
+
+
+@app.post("/api/auth/logout", tags=["auth"])
+def logout(user: dict = Depends(current_user)):
+    revoke_token(user["token"])
+    return {"detail": "로그아웃되었습니다"}
+
+
+@app.get("/api/auth/me", tags=["auth"])
+def me(user: dict = Depends(current_user)):
+    return {"nickname": user["nickname"], "user_id": user["user_id"]}
