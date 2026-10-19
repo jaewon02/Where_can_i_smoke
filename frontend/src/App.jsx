@@ -8,6 +8,7 @@ import RoutePanel, { ME } from "./RoutePanel.jsx";
 import Roulette from "./Roulette.jsx";
 import QuitAd from "./QuitAd.jsx";
 import { buildAreas } from "./areas.js";
+import LoginButton from "./LoginButton.jsx";
 
 // 흡연자 기준 색: 피워도 되는 곳(흡연구역)은 초록, 피우면 안 되는 곳(금연구역)은 빨강. styles.css 의 --smoking / --nonsmoking 과 같은 값
 const COLORS = { smoking: "#1f9d55", nonsmoking: "#e5484d" };
@@ -600,6 +601,7 @@ export default function App() {
           </div>
         </>
       )}
+      <LoginButton className="absolute top-3.5 right-3.5 z-10" /> {/* 임시: 위치는 팀과 정함 */}
       <div className={`fab-group ${menuOpen ? "open" : ""}`}>
         <button
           className="fab main"
