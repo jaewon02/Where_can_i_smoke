@@ -28,7 +28,7 @@ npm run dev     # http://localhost:5173
 - 샘플을 지우고 다시 넣기: `uv run python seed.py --reset` (샘플 구역의 후기도 함께 삭제됨)
 
 ## 금연구역 자동 표시
-`frontend/src/facilities.js`의 규칙대로 송파구의 금연구역을 지도에 자동으로 그립니다. 축소/확대와 상관없이 화면에 보이는 영역 전체가 대상이고,
+`frontend/src/facilities.js`의 규칙대로 송파구·강남구의 금연구역을 지도에 자동으로 그립니다. 축소/확대와 상관없이 화면에 보이는 영역 전체가 대상이고,
 겹치는 범위는 하나의 구역으로 합쳐져 바깥 테두리만 그려집니다. 구역마다 배지(눌러서 시설 목록과 적용 기준 확인)는 많이 확대했을 때(레벨 2 이하)만 표시합니다.
 기준 출처: [금연길라잡이 - 금연구역 지정 및 확대](https://www.nosmokeguide.go.kr/information/policy/207)
 
@@ -40,9 +40,9 @@ npm run dev     # http://localhost:5173
 | 지자체 조례 | 지하철 출입구·버스정류장·공원 | 조례별로 다름 (임시로 10m 등 표시) |
 
 **경계선 기준 계산**: 카카오는 시설의 점 위치만 주기 때문에, 오픈스트리트맵(OSM)의 시설 윤곽선을 찾아 경계선으로 씁니다.
-- 카카오 시설 점이 OSM 윤곽선 안에 있으면 그 윤곽선에서 법정 거리만큼 넓힌 다각형을 구역으로 저장합니다. (학교 91곳 중 87곳, 공원·놀이터 685곳이 매칭)
+- 카카오 시설 점이 OSM 윤곽선 안에 있으면 그 윤곽선에서 법정 거리만큼 넓힌 다각형을 구역으로 저장합니다. (학교는 송파구 91곳 중 87곳, 강남구 132곳 중 130곳이 매칭)
 - 윤곽선이 없는 시설(주로 어린이집·유치원)은 위치 + 근사 반경으로 그리고, 말풍선에 "범위 추정"이라고 표시합니다.
-- 지하철은 역 중심이 아니라 OSM의 **출입구** 위치(129곳)에서 10m를 씁니다.
+- 지하철은 역 중심이 아니라 OSM의 **출입구** 위치(송파구 129곳, 강남구 290곳)에서 10m를 씁니다.
 - 의원·치과 같은 작은 의료기관은 대부분 상가 건물 안이라 지도에는 그리지 않습니다. (DB에는 보관)
 - 버스정류장은 카카오 장소 데이터에 거의 없어서(2곳) 사실상 표시되지 않습니다. 서울 열린데이터광장 등 별도 데이터가 필요합니다.
 - 조례 항목은 지자체마다 다르므로 송파구 조례를 확인해 `facilities.js`와 `backend/facilities_tool.py`의 `RULES`를 맞춰야 합니다.
@@ -50,12 +50,12 @@ npm run dev     # http://localhost:5173
 **데이터 준비** (처음 받은 PC에서는 이것만 하면 됩니다. 카카오/OSM 접속 불필요)
 ```bash
 cd backend
-uv run python facilities_tool.py load     # data/facilities_songpa.json -> DB (시설 2,521개, 경계선 구역 포함)
+uv run python facilities_tool.py load     # data/facilities_*.json -> DB (송파구·강남구 시설, 경계선 구역 포함)
 ```
-**데이터를 새로 만들려면**
-1. 시설 위치 수집: `tools/collect_facilities.js` 상단 설명대로 브라우저에서 실행 (카카오 장소 검색, 송파구를 격자로 나눠 빠짐없이 수집)
-2. 경계선 계산: `uv run python facilities_tool.py build [--refresh]` (OSM Overpass에서 윤곽선/출입구를 받아 구역 계산)
-3. 저장소용 파일 갱신: `uv run python facilities_tool.py export`
+**데이터를 새로 만들려면** (지역: `songpa`, `gangnam`. 새 지역은 `facilities_tool.py`의 `REGIONS`에 영역만 추가)
+1. 시설 위치 수집: `tools/collect_facilities.js` 상단 설명대로 브라우저에서 실행 (카카오 장소 검색, 구를 격자로 나눠 빠짐없이 수집)
+2. 경계선 계산: `uv run python facilities_tool.py build --region gangnam [--refresh]` (OSM Overpass에서 윤곽선/출입구를 받아 구역 계산)
+3. 저장소용 파일 갱신: `uv run python facilities_tool.py export --region gangnam`
 
 지도 윤곽선 데이터: © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright) (ODbL). 화면 오른쪽 아래에 출처를 표시합니다.
 

@@ -271,7 +271,7 @@ export default function App() {
   useEffect(() => {
     if (!kakao) return;
     const map = new kakao.maps.Map(document.getElementById("map"), {
-      center: new kakao.maps.LatLng(37.5035, 127.1083), // 송파구 흡연구역이 모여 있는 곳
+      center: new kakao.maps.LatLng(37.4990, 127.0560), // 강남구 한가운데 (지역을 바꾸려면 이 좌표와 backend/facilities_tool.py 의 REGIONS 를 같이 바꿈)
       level: 6,
     });
     mapRef.current = map;

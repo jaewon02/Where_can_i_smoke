@@ -1,10 +1,12 @@
 """금연 규칙 대상 시설(facilities 테이블) 도구
 
-    python facilities_tool.py build [--refresh]   # 시설 경계선(OSM)을 찾아 금연 구역 계산 -> DB
-    python facilities_tool.py export              # DB -> data/facilities_songpa.json
-    python facilities_tool.py load                # data/facilities_songpa.json -> DB
+    python facilities_tool.py build  --region gangnam [--refresh]   # 시설 경계선(OSM)을 찾아 금연 구역 계산 -> DB
+    python facilities_tool.py export --region gangnam               # DB -> data/facilities_gangnam.json
+    python facilities_tool.py load   [--region gangnam]             # data/facilities_*.json -> DB (지역 생략하면 전부)
 
-시설 위치는 카카오 장소 검색으로 송파구 전체를 구역별로 모은 것입니다 (수집 방법: tools/collect_facilities.js).
+지역(--region): songpa(송파구), gangnam(강남구). 새 지역은 REGIONS에 영역(bbox)만 추가하면 됩니다.
+
+시설 위치는 카카오 장소 검색으로 해당 구 전체를 구역별로 모은 것입니다 (수집 방법: tools/collect_facilities.js).
 카카오는 시설의 '점' 위치만 주기 때문에, 금연 거리를 시설 경계선에서 재려고 오픈스트리트맵(OSM)의 윤곽선을 씁니다.
   - 카카오 시설 점이 OSM 윤곽선(학교, 어린이집, 병원, 도서관, 공원, 놀이터) 안에 있으면 그 윤곽선을 시설 경계로 보고,
     경계선 바깥으로 법정 거리만큼 넓힌 다각형을 금연 구역(area)으로 저장합니다.
@@ -28,10 +30,29 @@ from shapely.strtree import STRtree
 
 from db import get_conn, init_db
 
-DATA_FILE = Path(__file__).parent / "data" / "facilities_songpa.json"
-OSM_CACHE = Path(__file__).parent / ".cache" / "osm_songpa.json"
+DATA_DIR = Path(__file__).parent / "data"
+CACHE_DIR = Path(__file__).parent / ".cache"
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
-BBOX = (37.455, 127.07, 37.545, 127.19)  # 남, 서, 북, 동 (송파구와 주변)
+# 지역별 영역 (남, 서, 북, 동). 해당 구와 주변을 덮도록 넉넉하게 잡음 (이웃 구 시설은 수집 단계에서 주소로 걸러냄)
+REGIONS = {
+    "songpa": {"name": "송파구", "bbox": (37.455, 127.07, 37.545, 127.19)},
+    "gangnam": {"name": "강남구", "bbox": (37.455, 127.005, 37.545, 127.125)},
+}
+
+
+def region_files(region: str) -> tuple[Path, Path]:
+    return DATA_DIR / f"facilities_{region}.json", CACHE_DIR / f"osm_{region}.json"
+
+
+def get_region(argv: list[str]) -> str:
+    if "--region" not in argv or argv.index("--region") + 1 >= len(argv) or argv[argv.index("--region") + 1] not in REGIONS:
+        sys.exit(f"--region 을 지정하세요: {', '.join(REGIONS)}")
+    return argv[argv.index("--region") + 1]
+
+
+def in_bbox_sql(bbox) -> tuple[str, tuple]:
+    s_, w_, n_, e_ = bbox
+    return "lat BETWEEN ? AND ? AND lng BETWEEN ? AND ?", (s_, n_, w_, e_)
 
 # type_key -> (경계선에서 넓힐 거리 m, 경계선을 모를 때 쓰는 근사 반경 m)
 #   어린이집/유치원/학교: 시설 경계선 30m 이내 (국민건강증진법)
@@ -69,9 +90,9 @@ OSM_GROUPS = {
 EXTRA_FROM_OSM = {"park", "playground"}  # 카카오에 없는 OSM 윤곽선도 시설로 추가할 종류
 MAX_FOOTPRINT_M2 = 300_000  # 공원/놀이터가 아닌데 이보다 크면 엉뚱한 윤곽선으로 보고 무시
 MIN_FOOTPRINT_M2 = 30
-STATION_MAX_M = 250  # 출입구와 가장 가까운 카카오 지하철역이 이 거리 안이어야 송파구 역으로 인정
+STATION_MAX_M = 250  # 출입구와 가장 가까운 카카오 지하철역이 이 거리 안이어야 해당 구 역으로 인정
 
-# 위도/경도 <-> 미터 변환 (송파구 일대에서는 평면 근사로 충분)
+# 위도/경도 <-> 미터 변환 (서울 동남권 일대에서는 평면 근사로 충분)
 LAT0, LNG0 = 37.5, 127.12
 KY = 111_320.0
 KX = KY * math.cos(math.radians(LAT0))
@@ -80,11 +101,12 @@ to_ll = lambda a: np.column_stack((a[:, 0] / KX + LNG0, a[:, 1] / KY + LAT0))  #
 pt_m = lambda lng, lat: ((lng - LNG0) * KX, (lat - LAT0) * KY)  # noqa: E731
 
 
-def fetch_osm(refresh: bool) -> dict:
+def fetch_osm(region: str, refresh: bool) -> dict:
     """Overpass API에서 윤곽선/출입구를 받아 캐시 (없거나 --refresh일 때만 호출)"""
-    if OSM_CACHE.exists() and not refresh:
-        return json.loads(OSM_CACHE.read_text(encoding="utf-8"))
-    s, w, n, e = BBOX
+    _, cache = region_files(region)
+    if cache.exists() and not refresh:
+        return json.loads(cache.read_text(encoding="utf-8"))
+    s, w, n, e = REGIONS[region]["bbox"]
     box = f"({s},{w},{n},{e})"
     query = f"""[out:json][timeout:90];
 (
@@ -100,8 +122,8 @@ out tags geom;"""
         timeout=150,
     )
     resp.raise_for_status()
-    OSM_CACHE.parent.mkdir(exist_ok=True)
-    OSM_CACHE.write_text(resp.text, encoding="utf-8")
+    cache.parent.mkdir(exist_ok=True)
+    cache.write_text(resp.text, encoding="utf-8")
     return resp.json()
 
 
@@ -154,9 +176,10 @@ def to_area_json(geom_m, buffer_m: float) -> str | None:
     return json.dumps(result, separators=(",", ":")) if result else None
 
 
-def build(refresh: bool) -> None:
+def build(region: str, refresh: bool) -> None:
     init_db()
-    osm = fetch_osm(refresh)
+    where, params_bbox = in_bbox_sql(REGIONS[region]["bbox"])
+    osm = fetch_osm(region, refresh)
     elements = osm["elements"]
     polys = osm_polygons(elements)
     print(f"OSM 윤곽선 {len(polys)}개, 지하철 출입구 {sum(1 for e in elements if e.get('tags', {}).get('railway') == 'subway_entrance')}개")
@@ -169,8 +192,9 @@ def build(refresh: bool) -> None:
 
     with get_conn() as conn:
         # 이전 빌드가 추가한 OSM 시설/출입구는 지우고 다시 만듦
-        conn.execute("DELETE FROM facilities WHERE kakao_id LIKE 'osm:%'")
-        rows = [dict(r) for r in conn.execute("SELECT id, kakao_id, type_key, name, lat, lng FROM facilities")]
+        # (다른 지역 데이터는 건드리지 않도록 이 지역 영역 안의 것만)
+        conn.execute(f"DELETE FROM facilities WHERE kakao_id LIKE 'osm:%' AND {where}", params_bbox)
+        rows = [dict(r) for r in conn.execute(f"SELECT id, kakao_id, type_key, name, lat, lng FROM facilities WHERE {where}", params_bbox)]
         updates, used, matched = [], set(), 0
         for row in rows:
             rule = RULES.get(row["type_key"])
@@ -217,7 +241,7 @@ def build(refresh: bool) -> None:
                 break
             name, st = min(stations, key=lambda s: s[1].distance(pt))
             if st.distance(pt) > STATION_MAX_M:
-                continue  # 송파구 밖 역의 출입구
+                continue  # 이 구 밖 역의 출입구
             ref = el["tags"].get("ref")
             extras.append((f"osm:node/{el['id']}", "subway-exit", f"{name} {ref}번 출입구" if ref else f"{name} 출입구", el["lat"], el["lon"], None, 10.0))
             exits += 1
@@ -229,43 +253,49 @@ def build(refresh: bool) -> None:
     print(f"완료: 시설 {total}개")
 
 
-def export() -> None:
+def export(region: str) -> None:
+    data_file, _ = region_files(region)
+    where, params_bbox = in_bbox_sql(REGIONS[region]["bbox"])
     with get_conn() as conn:
         rows = []
-        for r in conn.execute("SELECT kakao_id, type_key, name, lat, lng, area, r FROM facilities ORDER BY type_key, kakao_id"):
+        for r in conn.execute(
+            f"SELECT kakao_id, type_key, name, lat, lng, area, r FROM facilities WHERE {where} ORDER BY type_key, kakao_id", params_bbox
+        ):
             d = dict(r)
             d["area"] = json.loads(d["area"]) if d["area"] else None
             rows.append({k: v for k, v in d.items() if v is not None})
-    DATA_FILE.write_text(json.dumps(rows, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-    print(f"{len(rows)}개 시설을 {DATA_FILE.name}에 저장 ({DATA_FILE.stat().st_size // 1024}KB)")
+    data_file.write_text(json.dumps(rows, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    print(f"[{REGIONS[region]['name']}] {len(rows)}개 시설을 {data_file.name}에 저장 ({data_file.stat().st_size // 1024}KB)")
 
 
-def load() -> None:
+def load(region: str | None) -> None:
     init_db()
-    items = json.loads(DATA_FILE.read_text(encoding="utf-8"))
-    params = [
-        (i["kakao_id"], i["type_key"], i["name"], i["lat"], i["lng"], json.dumps(i["area"], separators=(",", ":")) if i.get("area") else None, i.get("r"))
-        for i in items
-    ]
+    files = [region_files(region)[0]] if region else sorted(DATA_DIR.glob("facilities_*.json"))
     with get_conn() as conn:
-        before = conn.execute("SELECT COUNT(*) FROM facilities").fetchone()[0]
-        conn.executemany(
-            """INSERT INTO facilities (kakao_id, type_key, name, lat, lng, area, r) VALUES (?,?,?,?,?,?,?)
-               ON CONFLICT(kakao_id) DO UPDATE SET type_key=excluded.type_key, name=excluded.name,
-               lat=excluded.lat, lng=excluded.lng, area=excluded.area, r=excluded.r""",
-            params,
-        )
-        after = conn.execute("SELECT COUNT(*) FROM facilities").fetchone()[0]
-    print(f"{after - before}개 새로 추가, {len(items) - (after - before)}개 갱신 (전체 {after}개)")
+        for data_file in files:
+            items = json.loads(data_file.read_text(encoding="utf-8"))
+            params = [
+                (i["kakao_id"], i["type_key"], i["name"], i["lat"], i["lng"], json.dumps(i["area"], separators=(",", ":")) if i.get("area") else None, i.get("r"))
+                for i in items
+            ]
+            before = conn.execute("SELECT COUNT(*) FROM facilities").fetchone()[0]
+            conn.executemany(
+                """INSERT INTO facilities (kakao_id, type_key, name, lat, lng, area, r) VALUES (?,?,?,?,?,?,?)
+                   ON CONFLICT(kakao_id) DO UPDATE SET type_key=excluded.type_key, name=excluded.name,
+                   lat=excluded.lat, lng=excluded.lng, area=excluded.area, r=excluded.r""",
+                params,
+            )
+            after = conn.execute("SELECT COUNT(*) FROM facilities").fetchone()[0]
+            print(f"{data_file.name}: {after - before}개 새로 추가, {len(items) - (after - before)}개 갱신 (전체 {after}개)")
 
 
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
     if cmd == "build":
-        build("--refresh" in sys.argv)
+        build(get_region(sys.argv), "--refresh" in sys.argv)
     elif cmd == "export":
-        export()
+        export(get_region(sys.argv))
     elif cmd == "load":
-        load()
+        load(get_region(sys.argv) if "--region" in sys.argv else None)
     else:
         sys.exit(__doc__)

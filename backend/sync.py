@@ -35,14 +35,14 @@ DATA_API_KEY = os.getenv("DATA_API_KEY", "")
 KAKAO_REST_API_KEY = os.getenv("KAKAO_REST_API_KEY", "")
 KAKAO_ADDRESS_URL = "https://dapi.kakao.com/v2/local/search/address.json"
 PER_PAGE = 100
-# 미리 변환해 둔 송파구 주소 -> 좌표 (이 파일이 있으면 카카오 REST 키 없이도 CSV를 가져올 수 있음)
-GEOCODE_PRESET = Path(__file__).parent / "data" / "geocode_songpa.json"
+# 미리 변환해 둔 주소 -> 좌표 (data/geocode_*.json 모두. 이 파일이 있으면 카카오 REST 키 없이도 CSV를 가져올 수 있음)
+GEOCODE_PRESETS = sorted((Path(__file__).parent / "data").glob("geocode_*.json"))
 SPREAD_M = 7  # 같은 건물에 흡연구역이 여러 개일 때 마커가 겹치지 않게 펼치는 반경(미터)
 
 
 def load_preset(conn) -> None:
-    if GEOCODE_PRESET.exists():
-        for addr, pos in json.loads(GEOCODE_PRESET.read_text(encoding="utf-8")).items():
+    for preset in GEOCODE_PRESETS:
+        for addr, pos in json.loads(preset.read_text(encoding="utf-8")).items():
             conn.execute("INSERT OR IGNORE INTO geocode_cache (address, lat, lng) VALUES (?,?,?)", (addr, pos["lat"], pos["lng"]))
 
 
