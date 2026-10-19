@@ -83,6 +83,7 @@ def init_db() -> None:
             conn.execute("ALTER TABLE facilities ADD COLUMN area TEXT")  # JSON: MultiPolygon 좌표 [[[ [lng,lat], ... ]]]
         if "r" not in cols:
             conn.execute("ALTER TABLE facilities ADD COLUMN r REAL")
+        # 회원 정보 (로그인)
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS users (

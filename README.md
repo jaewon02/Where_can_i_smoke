@@ -12,7 +12,7 @@ React(Vite) + FastAPI + SQLite + 카카오맵
 # 백엔드 (터미널 1)
 cd backend
 uv sync                                        # 의존성 설치 (.venv 생성)
-uv run python seed.py                          # DB 표 준비 (최초 1회, 지금은 넣을 샘플 데이터 없음)
+uv run python seed.py                          # 초기 데이터 (최초 1회, 아래 "초기 데이터" 참고)
 uv run uvicorn main:app --reload --port 8001
 
 # 프런트엔드 (터미널 2)
@@ -21,11 +21,17 @@ npm install
 npm run dev     # http://localhost:5173
 ```
 
-## 구역 정보 보기와 후기/사진
-- 지도의 흡연구역·비흡연구역 마커를 누르면 **이름, 종류, 주소, 설명이 담긴 말풍선**이 뜹니다.
-- 예전에 있던 **오른쪽 사진·후기 패널(화면)은 제거**했습니다 (`ZonePanel.jsx` 삭제, 필요하면 git 기록에서 복구).
-- 백엔드의 후기/사진 API(`/api/zones/{id}`, `/api/zones/{id}/reviews`)와 `reviews`, `review_photos` 표는 그대로 남겨 두었습니다. 지금 화면에서는 쓰지 않습니다. (업로드 사진은 `backend/uploads/`, JPG/PNG/WEBP, 장당 5MB, 후기당 4장)
-- 과천 더미(샘플) 구역과 샘플 후기는 모두 삭제했습니다. 실제 데이터는 아래 "데이터 연동" 항목의 명령으로 넣습니다.
+## 초기 데이터 (`seed.py`)
+`uv run python seed.py` 한 번이면 저장소의 `backend/data/` 파일로 아래 데이터를 모두 넣습니다. 다시 실행해도 중복되지 않고, 카카오·공공데이터 키 없이 동작합니다.
+- 금연 규칙 대상 시설 (송파구·강남구, 경계선 기준 금연 구역 포함)
+- 송파구 실외흡연구역 40곳, 서초구 흡연시설 48곳
+- 강남구 금연거리 8곳 (OSM 도로 정보를 받아오므로 인터넷 연결 필요)
+
+예전 버전에서 넣은 과천 샘플(더미) 구역과 후기가 DB에 남아 있으면 이때 함께 지웁니다. 각 단계를 따로 실행하는 방법은 아래 절들에 있습니다.
+
+## 후기/사진 (흡연구역만)
+- 흡연구역 마커를 누르면 오른쪽 패널에서 사진·후기를 보고 작성할 수 있습니다. (비흡연구역은 말풍선만, 후기 작성은 API에서도 차단)
+- 업로드 사진은 `backend/uploads/`에 저장됩니다 (JPG/PNG/WEBP, 장당 5MB, 후기당 4장).
 
 ## 금연구역 자동 표시
 `frontend/src/facilities.js`의 규칙대로 송파구·강남구의 금연구역을 지도에 자동으로 그립니다. 화면에 보이는 영역 전체가 대상이고,
@@ -51,7 +57,7 @@ npm run dev     # http://localhost:5173
 - 버스정류장은 카카오에 거의 없어서 OSM의 버스정류장(`highway=bus_stop`)을 씁니다. 방향별 승강장이 따로 찍혀 있어 강남구 공식 지정 수(544곳)보다 많이 표시됩니다. 택시 승차대는 아직 넣지 않았습니다.
 - 조례 항목은 지자체마다 다르므로 해당 구 조례를 확인해 `facilities.js`와 `backend/facilities_tool.py`의 `RULES`를 맞춰야 합니다. 학교보호구역(출입문 50m), 도시공원 등 강남구 조례 항목 중 아직 반영하지 못한 것이 있습니다.
 
-**데이터 준비** (처음 받은 PC에서는 이것만 하면 됩니다. 카카오/OSM 접속 불필요)
+**데이터 준비** (`seed.py`가 함께 실행합니다. 시설만 따로 넣을 때. 카카오/OSM 접속 불필요)
 ```bash
 cd backend
 uv run python facilities_tool.py load     # data/facilities_*.json -> DB (송파구·강남구 시설, 경계선 구역 포함)

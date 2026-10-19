@@ -1,46 +1,48 @@
-"""DB 표를 준비하고 샘플 데이터를 넣는다: python seed.py  (샘플 구역/후기를 지우고 다시 넣으려면 python seed.py --reset)
+"""초기 데이터 한 번에 넣기: uv run python seed.py  (다시 실행해도 중복되지 않음)
 
-지금은 넣을 샘플 데이터가 없다 (과천 더미 데이터는 삭제함). 실제 데이터는 아래 명령으로 넣는다.
-  python sync.py --csv data/songpa_smoking.csv                      # 송파구 흡연구역
-  python sync.py --csv data/seocho_smoking.csv --schema seocho      # 서초구 흡연시설
-  python facilities_tool.py load                                    # 금연구역 규칙 대상 시설과 금연거리
-샘플을 다시 쓰고 싶으면 SAMPLES 와 REVIEWS 에 추가하면 된다.
+- 예전 버전의 과천 샘플(더미) 구역과 그 후기가 DB에 남아 있으면 지움
+- 저장소의 backend/data/ 파일로 실제 데이터를 넣음
+  · 금연 규칙 대상 시설 (송파구·강남구, 경계선 기준 금연 구역 포함)
+  · 송파구 실외흡연구역, 서초구 흡연시설
+  · 강남구 금연거리 (OSM 도로 정보를 받아오므로 인터넷 연결 필요)
+- 카카오/공공데이터 키 없이 실행됨 (좌표는 data/geocode_*.json 에 미리 변환되어 있음)
 """
+import subprocess
 import sys
+from pathlib import Path
 
 from db import get_conn, init_db
 
-# (이름, 종류 smoking|nonsmoking, 위도, 경도, 주소, 설명, 금연 반경 m 또는 None)
-SAMPLES: list[tuple] = []
+HERE = Path(__file__).parent
 
-# 구역 이름 -> [(닉네임, 별점, 내용, [사진 주소])]  (후기는 흡연구역에만 둔다)
-REVIEWS: dict[str, list[tuple]] = {}
+STEPS = [
+    ("금연 규칙 대상 시설 (송파구·강남구)", ["facilities_tool.py", "load"]),
+    ("송파구 실외흡연구역", ["sync.py", "--csv", "data/songpa_smoking.csv"]),
+    ("서초구 흡연시설", ["sync.py", "--csv", "data/seocho_smoking.csv", "--schema", "seocho"]),
+    ("강남구 금연거리", ["facilities_tool.py", "streets", "--region", "gangnam"]),
+]
 
 
 def main() -> None:
-    init_db()  # 표가 없으면 만들고, 필요한 컬럼을 추가
+    init_db()
+    with get_conn() as conn:  # foreign_keys=ON 이라 샘플 구역의 후기·후기 사진도 함께 지워짐
+        removed = conn.execute("DELETE FROM zones WHERE name LIKE '[샘플]%'").rowcount
+    if removed:
+        print(f"예전 과천 샘플 구역 {removed}개(후기 포함)를 지웠습니다", flush=True)
+
+    failed = []
+    for label, args in STEPS:
+        print(f"\n== {label}", flush=True)  # 아래 명령 출력보다 먼저 보이도록
+        if subprocess.run([sys.executable, *args], cwd=HERE).returncode != 0:
+            failed.append(label)
+
     with get_conn() as conn:
-        if "--reset" in sys.argv:  # 샘플 구역과 그 후기까지 지우고 다시 입력
-            conn.execute("DELETE FROM zones WHERE name LIKE '%샘플%'")
-        if SAMPLES:
-            conn.executemany(
-                "INSERT OR IGNORE INTO zones (name, type, lat, lng, address, note, radius_m) VALUES (?,?,?,?,?,?,?)",
-                SAMPLES,
-            )
-        for name, items in REVIEWS.items():
-            row = conn.execute("SELECT id FROM zones WHERE name = ?", (name,)).fetchone()
-            if not row or conn.execute("SELECT 1 FROM reviews WHERE zone_id = ?", (row["id"],)).fetchone():
-                continue  # 이미 후기가 있으면 건너뜀 (재실행해도 후기가 지워지지 않음)
-            for author, rating, content, photo_urls in items:
-                cur = conn.execute(
-                    "INSERT INTO reviews (zone_id, author, rating, content) VALUES (?,?,?,?)",
-                    (row["id"], author, rating, content),
-                )
-                conn.executemany(
-                    "INSERT INTO review_photos (review_id, filename) VALUES (?,?)",
-                    [(cur.lastrowid, u) for u in photo_urls],
-                )
-    print(f"DB 표 준비 완료. 샘플 구역 {len(SAMPLES)}개, 샘플 후기 {sum(len(v) for v in REVIEWS.values())}개 입력")
+        smoking = conn.execute("SELECT COUNT(*) FROM zones WHERE type = 'smoking'").fetchone()[0]
+        facilities = conn.execute("SELECT COUNT(*) FROM facilities").fetchone()[0]
+    print(f"\n완료: 흡연구역 {smoking}곳, 금연 규칙 대상 시설·금연거리 {facilities}곳")
+    if failed:
+        print("실패한 단계: " + ", ".join(failed) + " (위 메시지를 확인하고 해당 명령만 다시 실행하세요)")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

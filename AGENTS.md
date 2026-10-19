@@ -15,7 +15,7 @@
 backend/
   main.py      # FastAPI 앱, 모든 /api 라우트
   db.py        # get_conn(), init_db() — 스키마 정의와 마이그레이션(ALTER)
-  seed.py      # 샘플 데이터 (--reset 으로 초기화)
+  seed.py      # 초기 데이터 (data/ 파일 → DB: 시설·흡연구역·금연거리, 예전 과천 샘플 정리)
   sync.py      # 공공데이터 API → zones 동기화
   uploads/     # 후기 사진 저장소 (git 제외)
 frontend/src/
@@ -27,7 +27,7 @@ frontend/src/
 # 백엔드 (포트 8001)
 cd backend
 uv sync
-uv run python seed.py                  # 최초 1회
+uv run python seed.py                  # 초기 데이터 (최초 1회)
 uv run uvicorn main:app --reload --port 8001
 
 # 프런트엔드 (포트 5173, /api 는 8001로 프록시)
