@@ -327,7 +327,7 @@ export default function App() {
     setListOrigin(null);
   };
 
-  // 브라우저 위치 권한으로 내 위치를 받아 파란 점으로 표시하고 그쪽으로 이동
+  // 브라우저 위치 권한으로 내 위치를 받아 파란 점으로 표시 (보던 지도 화면은 옮기지 않음)
   const locate = () => {
     if (!navigator.geolocation) {
       return setMyPos({ status: "error", message: "이 브라우저는 위치 확인을 지원하지 않아요." });
@@ -344,8 +344,6 @@ export default function App() {
         dot.className = "my-loc";
         dot.title = "내 위치";
         myLocRef.current = new kakao.maps.CustomOverlay({ map, position: pos, content: dot, zIndex: 4 });
-        map.setLevel(4);
-        map.setCenter(pos);
       },
       (err) =>
         setMyPos({
