@@ -4,6 +4,7 @@
 
 ## 기술 스택
 - 프론트엔드: React 18 + Vite, **JavaScript(.jsx)** — TypeScript로 바꾸지 않는다
+- 스타일링/UI: **Tailwind CSS** + **shadcn/ui** — `frontend/`에 설치되어 있지 않으면 설치하고 쓴다 (shadcn은 `components.json`에 `"tsx": false`로 JS 컴포넌트 생성)
 - 백엔드: FastAPI + Python, 패키지 관리는 **uv** (`pyproject.toml` + `uv.lock` 커밋)
 - DB: **SQLite**
 - 지도: 카카오맵 JavaScript API
