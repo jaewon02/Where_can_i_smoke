@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import RouteButtons from "./RouteButtons.jsx";
 
 // 키워드로 장소를 찾고, 없으면 주소로 한 번 더 찾음 (최대 15건)
 export function searchPlaces(kakao, query, center) {
@@ -39,7 +40,7 @@ export function searchPlaces(kakao, query, center) {
 }
 
 // children: 검색 결과 목록이 접혀 있을 때 그 아래에 보여줄 내용 (화면 안 흡연구역 목록)
-export default function SearchBox({ kakao, getCenter, onSelect, onClear, children }) {
+export default function SearchBox({ kakao, getCenter, onSelect, onClear, onRoutePick, children }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState(null); // null이면 목록 닫힘
   const [active, setActive] = useState(-1);
@@ -150,7 +151,10 @@ export default function SearchBox({ kakao, getCenter, onSelect, onClear, childre
                 <b>{r.name}</b>
                 {r.category && <span className="muted">{r.category}</span>}
               </div>
-              {r.address && <small>{r.address}</small>}
+              <div className="sr-bottom">
+                {r.address && <small>{r.address}</small>}
+                <RouteButtons place={r} onPick={onRoutePick} />
+              </div>
             </li>
           ))}
         </ul>

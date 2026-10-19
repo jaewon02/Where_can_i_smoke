@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import RouteButtons from "./RouteButtons.jsx";
 
 const MAX_PHOTOS = 4;
 const MAX_PHOTO_MB = 5;
@@ -34,7 +35,7 @@ function StarInput({ value, onChange }) {
   );
 }
 
-export default function ZonePanel({ zoneId, onClose }) {
+export default function ZonePanel({ zoneId, onClose, onRoutePick }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [lightbox, setLightbox] = useState(null);
@@ -99,6 +100,7 @@ export default function ZonePanel({ zoneId, onClose }) {
                 <span className="muted">아직 후기가 없어요</span>
               )}
             </div>
+            <RouteButtons place={zone} onPick={onRoutePick} className="panel-od" />
           </header>
 
           {allPhotos.length > 0 && (

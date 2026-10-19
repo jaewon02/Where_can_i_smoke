@@ -1,3 +1,5 @@
+import RouteButtons from "./RouteButtons.jsx";
+
 // 두 좌표 사이 거리(m)
 function distance(a, b) {
   const R = 6371000;
@@ -12,7 +14,7 @@ const fmtDist = (m) => (m < 1000 ? `${Math.round(m / 10) * 10}m` : `${(m / 1000)
 
 // 지금 지도 화면 안의 흡연구역 목록
 // 검색한 장소(origin)가 있으면 그곳에서 가까운 순, 없으면 별점 높은 순
-export default function ZoneList({ zones, origin, selectedId, hidden, onPick }) {
+export default function ZoneList({ zones, origin, selectedId, hidden, onPick, onRoutePick }) {
   const items = origin
     ? zones.map((z) => ({ ...z, dist: distance(origin, z) })).sort((a, b) => a.dist - b.dist)
     : [...zones].sort((a, b) => (b.avg_rating ?? 0) - (a.avg_rating ?? 0) || b.review_count - a.review_count);
@@ -33,7 +35,7 @@ export default function ZoneList({ zones, origin, selectedId, hidden, onPick }) 
 
       <ul>
         {items.map((z) => (
-          <li key={z.id}>
+          <li key={z.id} className="zl-row">
             <button className={`zl-item ${z.id === selectedId ? "selected" : ""}`} onClick={() => onPick(z)}>
               <div className="zl-top">
                 <b>{z.name}</b>
@@ -52,6 +54,7 @@ export default function ZoneList({ zones, origin, selectedId, hidden, onPick }) 
                 {z.note && <span className="muted zl-note">· {z.note}</span>}
               </div>
             </button>
+            <RouteButtons place={z} onPick={onRoutePick} className="zl-od" />
           </li>
         ))}
       </ul>

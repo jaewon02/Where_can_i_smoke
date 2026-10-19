@@ -385,3 +385,76 @@ body { margin: 0; font-family: system-ui, "Noto Sans KR", sans-serif; }
 .info small { font-size: 12px; }
 
 .credit { position: absolute; right: 8px; bottom: 4px; z-index: 5; font-size: 11px; color: #555; background: rgba(255,255,255,.75); padding: 1px 6px; border-radius: 4px; pointer-events: none; }
+
+/* 장소 옆 [출발 | 도착] 버튼 */
+.od-btns {
+  display: inline-flex; flex: none; border: 1px solid #d5d5d5; border-radius: 16px; overflow: hidden; background: #fff;
+}
+.od-btns button {
+  padding: 4px 11px; border: none; background: none; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.od-btns button + button { border-left: 1px solid #e5e5e5; }
+.od-start { color: #333; }
+.od-end { color: #1e88e5; }
+.od-btns button:hover { background: #f2f6fc; }
+.od-btns button:focus-visible { outline: 2px solid #1e88e5; outline-offset: -2px; }
+.sr-bottom { display: flex; align-items: center; gap: 8px; margin-top: 3px; }
+.sr-bottom small { flex: 1; min-width: 0; margin-top: 0 !important; }
+.zl-row { position: relative; }
+.zl-row .zl-item { padding-bottom: 38px; }
+.zl-od { position: absolute; left: 18px; bottom: 10px; }
+.panel-od { margin-top: 12px; }
+.panel-od button { padding: 6px 16px; font-size: 13px; }
+
+/* 지도를 눌렀을 때 뜨는 [출발 | 도착] 카드 */
+.click-card {
+  position: relative; display: flex; flex-direction: column; gap: 3px; min-width: 190px; max-width: 260px;
+  margin-bottom: 14px; padding: 12px 14px; border-radius: 12px; background: #fff;
+  box-shadow: 0 4px 16px rgba(0,0,0,.25); font-size: 13px; text-align: left;
+}
+.click-card::after { /* 아래쪽 말풍선 꼬리 */
+  content: ""; position: absolute; left: 50%; bottom: -7px; width: 14px; height: 14px;
+  background: #fff; transform: translateX(-50%) rotate(45deg); box-shadow: 3px 3px 6px rgba(0,0,0,.08);
+}
+.cc-title { padding-right: 20px; font-size: 14px; font-weight: 700; color: #222; }
+.cc-addr { color: #777; font-size: 12px; }
+.cc-addr:empty { display: none; }
+.cc-od { align-self: flex-start; margin-top: 8px; }
+.cc-close {
+  position: absolute; top: 6px; right: 6px; width: 24px; height: 24px; border: none; border-radius: 50%;
+  background: none; color: #999; font-size: 12px; cursor: pointer;
+}
+.cc-close:hover { background: #f2f2f2; }
+.cc-pin { /* 누른 지점 표시 */
+  position: absolute; left: 50%; bottom: -16px; z-index: 1; width: 10px; height: 10px; border-radius: 50%;
+  background: #1e88e5; border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,.4); transform: translate(-50%, 50%);
+}
+
+/* 길찾기 이동 수단 탭 + 대중교통 구간 */
+.route { overflow-y: auto; }
+.route-modes { display: flex; gap: 6px; padding: 0 14px 10px; flex: none; }
+.route-modes button {
+  flex: 1; padding: 8px 4px; border: 1.5px solid #ddd; border-radius: 10px; background: #fff;
+  font: inherit; font-size: 13px; font-weight: 600; color: #555; cursor: pointer; white-space: nowrap;
+}
+.route-modes button.on { border-color: #1e88e5; background: #e8f2fd; color: #1565c0; }
+.route-modes button:focus-visible { outline: 3px solid #90caf9; outline-offset: 1px; }
+.rr-sub { margin-top: 4px; font-size: 13px; color: #555; }
+.rr-options { display: flex; gap: 6px; margin-bottom: 8px; }
+.rr-options button {
+  padding: 3px 10px; border: 1.5px solid #ccd; border-radius: 12px; background: #fff;
+  font: inherit; font-size: 12px; cursor: pointer;
+}
+.rr-options button.on { border-color: #1e88e5; color: #1565c0; font-weight: 700; }
+.transit-steps { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.ts { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; }
+.ts-badge {
+  flex: none; min-width: 44px; padding: 2px 6px; border-radius: 8px; text-align: center;
+  font-size: 11px; font-weight: 700; color: #fff; background: #888;
+}
+.ts-bus .ts-badge { background: #1e88e5; }
+.ts-subway .ts-badge { background: #1f9d55; }
+.ts-walking .ts-badge { background: #aaa; }
+.ts-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; color: #333; }
+.ts-body small { color: #777; font-size: 12px; }
+.ts-time { flex: none; font-size: 12px; color: #555; }
