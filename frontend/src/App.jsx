@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useKakao } from "./useKakaoMap.js";
 import { FACILITY_TYPES, searchAll } from "./facilities.js";
 import ZonePanel from "./ZonePanel.jsx";
+import LoginButton from "./LoginButton.jsx";
 
 const COLORS = { smoking: "#e5484d", nonsmoking: "#1f9d55" };
 
@@ -211,6 +212,7 @@ export default function App() {
   return (
     <div className="app">
       <div id="map" />
+      <LoginButton className="absolute top-3.5 right-3.5 z-10" /> {/* 임시: 위치는 팀과 정함 */}
       {selectedId && <ZonePanel zoneId={selectedId} onClose={() => setSelectedId(null)} />}
       <div className={`fab-group ${menuOpen ? "open" : ""}`}>
         <button
