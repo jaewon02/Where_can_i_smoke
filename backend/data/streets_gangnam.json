@@ -1,0 +1,50 @@
+{
+  "source": "강남구보건소 '금연 환경 조성' 금연거리 현황(2026.7.31 기준) https://health.gangnam.go.kr/web/business/promotion/clinic/sub02.do",
+  "basis": "서울특별시 강남구 금연환경 조성 및 간접흡연 피해방지 조례 제5조",
+  "note": "도로 위치는 OSM 도로 데이터로 추정한 근사 범위. 시작/끝점은 지하철 출입구(OSM)와 카카오 장소 좌표. 도로를 따라 잰 길이가 공식 길이와 맞는지 검증하고, 맞지 않으면 그리지 않음",
+  "road_segments": [
+    {"id": "gangnam-daero-east", "label": "강남대로 동측 금연거리", "item": 1, "road": "강남대로",
+     "from": {"name": "신논현역 5번 출구", "lat": 37.50419, "lng": 127.02489},
+     "to": {"name": "강남역 12번 출구", "lat": 37.49842, "lng": 127.02854}, "official_m": 870, "sides": 1},
+    {"id": "teheran-east", "label": "테헤란로 동측 금연거리", "item": 10, "road": "테헤란로",
+     "from": {"name": "선릉역 2번 출구", "lat": 37.50404, "lng": 127.0493},
+     "to": {"name": "포스코사거리", "lat": 37.50684, "lng": 127.0566}, "official_m": 700, "sides": 1},
+    {"id": "teheran-west", "label": "테헤란로 서측 금연거리", "item": 11, "road": "테헤란로",
+     "from": {"name": "캠브리지빌딩", "lat": 37.49801, "lng": 127.02941},
+     "to": {"name": "역삼역 2번 출구", "lat": 37.50033, "lng": 127.03646}, "official_m": 685, "sides": 1},
+    {"id": "nambu-south", "label": "남부순환로 남측 금연거리", "item": 4, "road": "남부순환로",
+     "from": {"name": "매봉터널 사거리", "lat": 37.48842, "lng": 127.04986},
+     "to": {"name": "도곡역 4번 출구", "lat": 37.49055, "lng": 127.05512}, "official_m": 510, "sides": 1}
+  ],
+  "paired_segments": [
+    {"id": "daechi-academy", "label": "대치동 학원가 금연거리", "item": 3, "official_total_m": 3300, "sides": 2,
+     "note": "도곡동길(OSM 도곡로) 양측보도 + 삼성로 양측보도. 두 도로 길이(×2)의 합이 공식 합계(3,300m)와 맞는지로 해석을 검증",
+     "parts": [
+       {"road": "도곡로", "from": {"name": "롯데백화점 강남점", "lat": 37.49696, "lng": 127.05328},
+        "to": {"name": "은마사거리", "lat": 37.49897, "lng": 127.06017}},
+       {"road": "삼성로", "from": {"name": "대치사거리", "lat": 37.50309, "lng": 127.05863},
+        "to": {"name": "한티근린공원", "lat": 37.49555, "lng": 127.06211}}
+     ]}
+  ],
+  "school_streets": [
+    {"id": "school-nonhyeon", "label": "서울논현초등학교 주변 금연거리", "item": 5, "school": "서울논현초등학교",
+     "streets": [{"name": "강남대로122길", "official_m": 30}, {"name": "강남대로120길", "official_m": 46}, {"name": "봉은사로7길", "official_m": 40}]},
+    {"id": "school-dogok-middle", "label": "도곡중학교 주변 금연거리", "item": 6, "school": "도곡중학교",
+     "streets": [{"name": "언주로57길", "official_m": 253}, {"name": "도곡로38길", "official_m": 55}]},
+    {"id": "school-whimoon", "label": "휘문고등학교 주변 금연거리", "item": 7, "school": "휘문고등학교",
+     "streets": [{"name": "역삼로87길", "official_m": 70}, {"name": "역삼로", "official_m": 150}, {"name": "역삼로97길", "official_m": 60}, {"name": "테헤란로92길", "official_m": 110}]},
+    {"id": "school-dankook", "label": "단국대학교사범대학부속중학교 주변 금연거리", "item": 8, "school": "단국대학교사범대학부속중학교",
+     "streets": [{"name": "도곡로70길", "official_m": 260}, {"name": "도곡로64길", "official_m": 45}]},
+    {"id": "school-samreung", "label": "삼릉초등학교 주변 금연거리", "item": 9, "school": "삼릉초등학교",
+     "streets": [{"name": "봉은사로63길", "official_m": 44}, {"name": "선릉로112길", "official_m": 29}]},
+    {"id": "school-eonbuk", "label": "언북초등학교 주변 금연거리", "item": 12, "school": "언북초등학교",
+     "streets": [{"name": "학동로63길", "official_m": 150}, {"name": "학동로67길", "official_m": 160}, {"name": "학동로", "official_m": 120}]}
+  ],
+  "skipped": [
+    {"item": 2, "label": "영동대로 코엑스 주변 836m", "reason": "코엑스사거리~호텔 입구가 도로의 어느 구간인지 확정할 근거가 없음 (직선거리 약 260m인데 공식 836m)"},
+    {"item": 1, "label": "강남대로 남측 697m(연장)", "reason": "연장 구간의 위치가 공식 안내에 없음"},
+    {"item": 4, "label": "군인공제회관~타워팰리스 2차 사잇길 105m", "reason": "골목 위치를 특정할 수 없음"},
+    {"item": 6, "label": "강남세브란스병원 후문 입구 전체", "reason": "구간이 아니라 시설 입구 지점이라 범위를 정할 수 없음"},
+    {"item": 11, "label": "강남역 12번출구~테헤란로 햇살마당 910m", "reason": "햇살마당 위치를 확인하지 못함"}
+  ]
+}
