@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { searchPlaces } from "./SearchBox.jsx";
+import QuitAd from "./QuitAd.jsx";
 
 const ME = { isMe: true, name: "내 위치" };
 const fmtDist = (m) => (m < 1000 ? `${m}m` : `${(m / 1000).toFixed(1)}km`);
@@ -99,13 +100,12 @@ function PlaceInput({ kind, label, value, onChange, kakao, getCenter }) {
 }
 
 // 사이드바 길찾기 화면: 출발 → 도착 도보 경로 (TMAP)
-export default function RoutePanel({ kakao, getCenter, myPos, searchedPlace, onLocate, onShowRoute, onClearRoute, onBack }) {
+export default function RoutePanel({ kakao, getCenter, myPos, searchedPlace, smoking, onSmokingChange, onLocate, onShowRoute, onClearRoute, onBack }) {
   const [start, setStart] = useState(ME);
   const [end, setEnd] = useState(searchedPlace); // 검색해 둔 장소가 있으면 도착지로
   const [route, setRoute] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [smoking, setSmoking] = useState(false); // 흡연모드: 중간에 흡연구역 들렀다 가기
   const [viaPick, setViaPick] = useState({ key: null, id: null }); // 직접 고른 경유 흡연구역
   const reqRef = useRef(0);
 
@@ -165,7 +165,7 @@ export default function RoutePanel({ kakao, getCenter, myPos, searchedPlace, onL
         <h2>도보 길찾기</h2>
         <label className={`smoke-toggle ${smoking ? "on" : ""}`} title="중간에 흡연구역을 들렀다 가요">
           <span>흡연모드</span>
-          <input type="checkbox" role="switch" checked={smoking} onChange={(e) => setSmoking(e.target.checked)} />
+          <input type="checkbox" role="switch" checked={smoking} onChange={(e) => onSmokingChange(e.target.checked)} />
           <span className="st-track" aria-hidden="true">
             <span className="st-thumb" />
           </span>
@@ -228,6 +228,7 @@ export default function RoutePanel({ kakao, getCenter, myPos, searchedPlace, onL
               <div className="rr-foot">
                 <small className="muted">경로 정보: TMAP</small>
               </div>
+              {smoking && <QuitAd slot={0} variant="inline" />}
             </>
           )}
         </div>
@@ -240,6 +241,10 @@ export default function RoutePanel({ kakao, getCenter, myPos, searchedPlace, onL
           도보 경로는 직선 10km 이내만 안내해요.
         </p>
       )}
+      <div className="route-ads">
+        <QuitAd slot={1} />
+        {smoking && <QuitAd slot={2} />}
+      </div>
     </div>
   );
 }

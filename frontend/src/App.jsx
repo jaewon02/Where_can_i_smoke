@@ -6,6 +6,7 @@ import SearchBox from "./SearchBox.jsx";
 import ZoneList from "./ZoneList.jsx";
 import RoutePanel from "./RoutePanel.jsx";
 import Roulette from "./Roulette.jsx";
+import QuitAd from "./QuitAd.jsx";
 
 const COLORS = { smoking: "#e5484d", nonsmoking: "#1f9d55" };
 
@@ -65,6 +66,8 @@ export default function App() {
   const [searchedPlace, setSearchedPlace] = useState(null); // 길찾기 출발지 후보
   const [myPos, setMyPos] = useState({ status: "idle" }); // 내 위치 { status, lat, lng, message }
   const [rouletteOpen, setRouletteOpen] = useState(false); // 오늘의 담배 룰렛
+  const [smokingMode, setSmokingMode] = useState(false); // 길찾기 흡연모드 (켜면 금연 안내가 더 많이 뜸)
+  const [adClosed, setAdClosed] = useState(false); // 지도 위 금연 안내 카드 닫음 (흡연모드에선 못 닫음)
   const [selectedId, setSelectedId] = useState(null); // 오른쪽 상세 패널에 보여줄 구역
   const [showSmoking, setShowSmoking] = useState(true);
   const [showNon, setShowNon] = useState(true); // 비흡연구역 + 주변 금연시설
@@ -347,6 +350,11 @@ export default function App() {
             getCenter={() => mapRef.current?.getCenter()}
             myPos={myPos}
             searchedPlace={searchedPlace}
+            smoking={smokingMode}
+            onSmokingChange={(on) => {
+              setSmokingMode(on);
+              if (on) setAdClosed(false);
+            }}
             onLocate={locate}
             onShowRoute={showRoute}
             onClearRoute={clearRoute}
@@ -370,6 +378,9 @@ export default function App() {
           <SearchBox kakao={kakao} getCenter={() => mapRef.current?.getCenter()} onSelect={goToPlace} onClear={clearSearch}>
             <ZoneList zones={visibleSmoking} origin={listOrigin} selectedId={selectedId} hidden={!showSmoking} onPick={pickZone} />
           </SearchBox>
+          <div className="sidebar-ad">
+            <QuitAd slot={0} />
+          </div>
         </div>
         <button
           className="sidebar-tab"
@@ -383,6 +394,22 @@ export default function App() {
       </aside>
       {selectedId && <ZonePanel zoneId={selectedId} onClose={() => setSelectedId(null)} />}
       {rouletteOpen && <Roulette onClose={() => setRouletteOpen(false)} />}
+      {/* 지도 위 금연 안내: 평소엔 오른쪽 아래 1개(닫기 가능), 흡연모드면 위쪽 띠 + 왼쪽 아래까지 더 띄움 */}
+      {(!adClosed || smokingMode) && (
+        <div className="map-ad right">
+          <QuitAd slot={5} variant="float" onClose={smokingMode ? undefined : () => setAdClosed(true)} />
+        </div>
+      )}
+      {smokingMode && (
+        <>
+          <div className="map-ad top">
+            <QuitAd slot={3} variant="strip" />
+          </div>
+          <div className="map-ad left">
+            <QuitAd slot={4} variant="float" />
+          </div>
+        </>
+      )}
       <div className={`fab-group ${menuOpen ? "open" : ""}`}>
         <button
           className="fab main"

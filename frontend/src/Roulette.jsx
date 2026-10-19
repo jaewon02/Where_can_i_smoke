@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { CIGARETTES } from "./cigarettes.js";
+import QuitAd from "./QuitAd.jsx";
 
 const ROW = 56; // 한 칸 높이(px), 창에는 3칸이 보이고 가운데 칸이 결과
 const LOOPS = 14; // 목록을 몇 번 이어 붙여 긴 띠로 만들지
@@ -87,6 +88,7 @@ export default function Roulette({ onClose }) {
         <button className="btn primary" onClick={spin} disabled={spinning}>
           {result ? "다시 돌리기" : "돌리기"}
         </button>
+        {result && <QuitAd slot={2} variant="inline" />}
       </div>
     </div>
   );
