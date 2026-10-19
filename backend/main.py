@@ -6,6 +6,7 @@ from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from auth import router as auth_router
 from db import get_conn, init_db
 
 UPLOAD_DIR = Path(__file__).parent / "uploads"
@@ -21,6 +22,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.mount("/api/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+app.include_router(auth_router)
 
 
 @app.on_event("startup")
