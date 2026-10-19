@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useKakao } from "./useKakaoMap.js";
 import { RULE_BY_KEY } from "./facilities.js";
-import ZonePanel from "./ZonePanel.jsx";
 import { buildAreas } from "./areas.js";
 import LoginButton from "./LoginButton.jsx";
 
@@ -74,7 +73,6 @@ function CigaretteIcon({ slash = false }) {
 export default function App() {
   const { kakao, error } = useKakao();
   const [menuOpen, setMenuOpen] = useState(true);
-  const [selectedId, setSelectedId] = useState(null); // 오른쪽 상세 패널에 보여줄 구역
   const [showSmoking, setShowSmoking] = useState(true);
   const [showNon, setShowNon] = useState(true); // 비흡연구역 + 주변 금연시설
   const [zoomLevel, setZoomLevel] = useState(6); // 지금 지도 확대 레벨 (금연구역을 보여줄지 안내하는 데 사용)
@@ -134,7 +132,6 @@ export default function App() {
           ? "※ 시설의 정확한 경계를 몰라 위치 기준으로 추정한 범위입니다"
           : "※ 일부 시설은 경계선 대신 위치 기준으로 추정한 범위입니다";
     el.append(document.createElement("br"), note);
-    setSelectedId(null);
     infoRef.current.setContent(el);
     infoRef.current.open(mapRef.current, marker);
   };
@@ -254,21 +251,16 @@ export default function App() {
         title: z.name,
       });
       kakao.maps.event.addListener(marker, "click", () => {
-        if (z.type === "smoking") {
-          // 흡연시설: 오른쪽 패널에서 사진/후기 보기
-          infoRef.current.close();
-          setSelectedId(z.id);
-          return;
-        }
-        // 비흡연구역: 후기 없이 간단한 말풍선만
-        setSelectedId(null);
+        // 흡연구역/비흡연구역 모두 간단한 말풍선만 (오른쪽 사진·후기 패널은 없앰)
         const el = document.createElement("div");
         el.className = "info";
         el.innerHTML = `<b></b><br><small></small><br><small></small>`;
         el.querySelector("b").textContent = z.name;
         const [s1, s2] = el.querySelectorAll("small");
+        const kind = z.type === "smoking" ? "흡연구역" : "비흡연구역";
         const range = z.radius_m ? ` · 반경 ${z.radius_m}m` : "";
-        s1.textContent = `비흡연구역${range} · ${z.address ?? ""}`;
+        const addr = z.address && z.address !== z.name ? z.address : ""; // 이름과 같은 주소(서초구 데이터)는 중복이라 생략
+        s1.textContent = [`${kind}${range}`, addr].filter(Boolean).join(" · ");
         s2.textContent = z.note ?? "";
         infoRef.current.setContent(el);
         infoRef.current.open(map, marker);
@@ -313,7 +305,6 @@ export default function App() {
       {showNon && zoomLevel > AREA_MAX_LEVEL && <div className="hint">금연구역은 지도를 더 확대하면 보여요</div>}
       <div className="credit">경계선: © OpenStreetMap contributors</div>
       <LoginButton className="absolute top-3.5 right-3.5 z-10" /> {/* 임시: 위치는 팀과 정함 */}
-      {selectedId && <ZonePanel zoneId={selectedId} onClose={() => setSelectedId(null)} />}
       <div className={`fab-group ${menuOpen ? "open" : ""}`}>
         <button
           className="fab main"

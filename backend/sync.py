@@ -113,9 +113,9 @@ SCHEMAS = {
     "seocho": lambda r: {
         "name": _short((r.get("설치위치") or "").strip()),
         "address": (r.get("설치위치") or "").strip(),
+        # 설명에는 시설형태, 규모, 추가시설만 보여줌 (설치주체는 지도에서 쓸모가 적어 제외. 원본 CSV에는 그대로 있음)
         "note": " · ".join(
-            x for x in [(r.get("시설형태") or "").strip(), (r.get("규모") or "").strip(), (r.get("추가시설") or "").strip(),
-                        f"설치주체 {(r.get('설치주체') or '').strip()}" if (r.get("설치주체") or "").strip() else ""] if x
+            x for x in [(r.get("시설형태") or "").strip(), (r.get("규모") or "").strip(), (r.get("추가시설") or "").strip()] if x
         ),
         "group": (r.get("설치위치"),),
     },

@@ -12,7 +12,7 @@ React(Vite) + FastAPI + SQLite + 카카오맵
 # 백엔드 (터미널 1)
 cd backend
 uv sync                                        # 의존성 설치 (.venv 생성)
-uv run python seed.py                          # 샘플 데이터 (최초 1회)
+uv run python seed.py                          # DB 표 준비 (최초 1회, 지금은 넣을 샘플 데이터 없음)
 uv run uvicorn main:app --reload --port 8001
 
 # 프런트엔드 (터미널 2)
@@ -21,11 +21,11 @@ npm install
 npm run dev     # http://localhost:5173
 ```
 
-## 후기/사진 (흡연구역만)
-- 흡연구역 마커를 누르면 오른쪽 패널에서 사진·후기를 보고 작성할 수 있습니다. (비흡연구역은 말풍선만, 후기 작성은 API에서도 차단)
-- 업로드 사진은 `backend/uploads/`에 저장됩니다 (JPG/PNG/WEBP, 장당 5MB, 후기당 4장).
-- 샘플 후기의 사진은 외부 더미 이미지(picsum.photos)라서 인터넷 연결이 필요합니다.
-- 샘플을 지우고 다시 넣기: `uv run python seed.py --reset` (샘플 구역의 후기도 함께 삭제됨)
+## 구역 정보 보기와 후기/사진
+- 지도의 흡연구역·비흡연구역 마커를 누르면 **이름, 종류, 주소, 설명이 담긴 말풍선**이 뜹니다.
+- 예전에 있던 **오른쪽 사진·후기 패널(화면)은 제거**했습니다 (`ZonePanel.jsx` 삭제, 필요하면 git 기록에서 복구).
+- 백엔드의 후기/사진 API(`/api/zones/{id}`, `/api/zones/{id}/reviews`)와 `reviews`, `review_photos` 표는 그대로 남겨 두었습니다. 지금 화면에서는 쓰지 않습니다. (업로드 사진은 `backend/uploads/`, JPG/PNG/WEBP, 장당 5MB, 후기당 4장)
+- 과천 더미(샘플) 구역과 샘플 후기는 모두 삭제했습니다. 실제 데이터는 아래 "데이터 연동" 항목의 명령으로 넣습니다.
 
 ## 금연구역 자동 표시
 `frontend/src/facilities.js`의 규칙대로 송파구·강남구의 금연구역을 지도에 자동으로 그립니다. 화면에 보이는 영역 전체가 대상이고,
