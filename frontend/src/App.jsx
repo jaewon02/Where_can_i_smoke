@@ -383,7 +383,7 @@ export default function App() {
         strokeStyle: dash ? "shortdash" : "solid",
         zIndex: 3,
       });
-    const SEG_COLOR = { BUS: "#1e88e5", SUBWAY: "#1f9d55", WALKING: "#777" };
+    const SEG_COLOR = { BUS: "#1e88e5", SUBWAY: "#7b4fd6", WALKING: "#777" }; // 지하철은 흡연구역(초록)과 헷갈리지 않게 보라
     const segLines = (segments ?? [])
       .filter((s) => s.path.length > 1)
       .map((s) => line(s.path.map(ll), s.type === "WALKING", SEG_COLOR[s.type] ?? "#1e88e5"));

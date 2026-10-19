@@ -159,7 +159,7 @@ body { margin: 0; font-family: system-ui, "Noto Sans KR", sans-serif; }
 .zl-head h3 { margin: 0; font-size: 15px; }
 /* Tailwind preflight가 제목 굵기를 없애므로 사이드바·룰렛 제목은 직접 굵게 */
 .zl-head h3, .route-head h2, .roulette h2 { font-weight: 700; }
-.zl-head h3 b { color: #e5484d; }
+.zl-head h3 b { color: var(--smoking); }
 .zl-head small { display: block; margin-top: 2px; }
 .zl-msg { margin: 0; padding: 14px 18px; font-size: 13px; color: #777; line-height: 1.5; }
 .zone-list ul { list-style: none; margin: 0; padding: 0; }
@@ -168,11 +168,11 @@ body { margin: 0; font-family: system-ui, "Noto Sans KR", sans-serif; }
   background: none; font: inherit; text-align: left; cursor: pointer;
 }
 .zl-item:hover { background: #fafafa; }
-.zl-item.selected { background: #fff3f3; box-shadow: inset 3px 0 0 #e5484d; }
+.zl-item.selected { background: #eef8f2; box-shadow: inset 3px 0 0 var(--smoking); }
 .zl-item:focus-visible { outline: 3px solid #1e88e5; outline-offset: -3px; }
 .zl-top { display: flex; align-items: baseline; gap: 8px; }
 .zl-top b { font-size: 14px; font-weight: 600; }
-.zl-dist { margin-left: auto; font-size: 12px; font-weight: 600; color: #e5484d; white-space: nowrap; }
+.zl-dist { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--smoking); white-space: nowrap; }
 .zl-addr { display: block; margin-top: 3px; color: #777; font-size: 12px; }
 .zl-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; font-size: 12px; }
 .zl-meta .muted { font-size: 12px; }
@@ -234,7 +234,7 @@ body { margin: 0; font-family: system-ui, "Noto Sans KR", sans-serif; }
 .pi-row:focus-within { border-color: #1e88e5; box-shadow: 0 0 0 2px rgba(30,136,229,.2); }
 .pi-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; margin-right: 8px; }
 .pi-dot.start { background: #1e88e5; }
-.pi-dot.end { background: #e5484d; }
+.pi-dot.end { background: #333; }
 .pi-row input { flex: 1; min-width: 0; border: none; outline: none; font: inherit; font-size: 14px; background: none; }
 .pi-row input::-webkit-search-cancel-button { display: none; }
 .pi-row input.is-me { color: #1565c0; font-weight: 600; }
@@ -260,18 +260,18 @@ body { margin: 0; font-family: system-ui, "Noto Sans KR", sans-serif; }
   border: 2px solid #fff; box-shadow: 0 1px 5px rgba(0,0,0,.35); white-space: nowrap;
 }
 .route-pin.start { background: #1e88e5; }
-.route-pin.end { background: #e5484d; }
+.route-pin.end { background: #333; }
 
 /* 흡연모드 스위치 */
 .smoke-toggle { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #666; cursor: pointer; }
-.smoke-toggle.on { color: #e5484d; font-weight: 600; }
+.smoke-toggle.on { color: var(--smoking); font-weight: 600; }
 .smoke-toggle input { position: absolute; opacity: 0; pointer-events: none; }
 .st-track { position: relative; width: 36px; height: 20px; border-radius: 10px; background: #ccc; transition: background .15s; }
 .st-thumb {
   position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%;
   background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.3); transition: transform .15s;
 }
-.smoke-toggle.on .st-track { background: #e5484d; }
+.smoke-toggle.on .st-track { background: var(--smoking); }
 .smoke-toggle.on .st-thumb { transform: translateX(16px); }
 .smoke-toggle:focus-within .st-track { outline: 3px solid #90caf9; outline-offset: 1px; }
 @media (prefers-reduced-motion: reduce) { .st-track, .st-thumb { transition: none; } }
@@ -279,14 +279,14 @@ body { margin: 0; font-family: system-ui, "Noto Sans KR", sans-serif; }
 /* 흡연모드 경유지 */
 .rr-via { margin-top: 6px; font-size: 13px; color: #333; }
 .rr-via.none { color: #888; }
-.rr-via-badge { display: inline-block; padding: 1px 7px; border-radius: 9px; background: #e5484d; color: #fff; font-size: 11px; font-weight: 700; }
+.rr-via-badge { display: inline-block; padding: 1px 7px; border-radius: 9px; background: var(--smoking); color: #fff; font-size: 11px; font-weight: 700; }
 .rr-cands { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .rr-cands button {
   max-width: 100%; padding: 4px 10px; border: 1.5px solid #ddd; border-radius: 14px; background: #fff;
   font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.rr-cands button.on { border-color: #e5484d; color: #e5484d; font-weight: 600; }
-.route-pin.via { background: #e5484d; }
+.rr-cands button.on { border-color: var(--smoking); color: var(--smoking); font-weight: 600; }
+.route-pin.via { background: var(--smoking); }
 .route-pin.end { background: #333; }
 .info .area-list { margin: 4px 0 6px; padding-left: 16px; list-style: disc; font-size: 12px; line-height: 1.5; }
 .info small { font-size: 12px; }
@@ -311,11 +311,11 @@ body { margin: 0; font-family: system-ui, "Noto Sans KR", sans-serif; }
 
 /* 오늘의 담배 룰렛 */
 .roulette-entry {
-  display: flex; align-items: center; gap: 6px; padding: 11px 14px; border: 1.5px solid #e5484d;
-  border-radius: 12px; background: #fff; color: #e5484d; font: inherit; font-size: 14px; font-weight: 600;
+  display: flex; align-items: center; gap: 6px; padding: 11px 14px; border: 1.5px solid var(--smoking);
+  border-radius: 12px; background: #fff; color: var(--smoking); font: inherit; font-size: 14px; font-weight: 600;
   cursor: pointer; white-space: nowrap; flex: none;
 }
-.roulette-entry:hover { background: #fff3f3; }
+.roulette-entry:hover { background: #eef8f2; }
 .roulette-entry:focus-visible { outline: 3px solid #90caf9; outline-offset: 2px; }
 .modal-backdrop {
   position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; padding: 16px;
@@ -330,7 +330,7 @@ body { margin: 0; font-family: system-ui, "Noto Sans KR", sans-serif; }
 .roulette .muted { margin: 0 0 14px; }
 .slot {
   position: relative; height: 168px; overflow: hidden; margin: 0 auto; border-radius: 14px;
-  background: #1c1c1e; box-shadow: inset 0 0 0 3px #e5484d, inset 0 6px 14px rgba(0,0,0,.6);
+  background: #1c1c1e; box-shadow: inset 0 0 0 3px var(--smoking), inset 0 6px 14px rgba(0,0,0,.6);
 }
 .slot-reel { list-style: none; margin: 0; padding: 0; will-change: transform; }
 .slot-reel li {
@@ -350,23 +350,23 @@ body { margin: 0; font-family: system-ui, "Noto Sans KR", sans-serif; }
 @keyframes slot-pop { 50% { transform: scale(1.04); } }
 @media (prefers-reduced-motion: reduce) { .slot.done .slot-frame { animation: none; } .slot.spinning .slot-reel { filter: none; } }
 .roulette-result { min-height: 30px; margin: 14px 0 4px; font-size: 16px; }
-.roulette-result b { color: #e5484d; font-size: 19px; }
+.roulette-result b { color: var(--smoking); font-size: 19px; }
 @media (prefers-reduced-motion: reduce) { .modal-backdrop { animation: none; } }
 
 /* 금연 안내 배너 */
 .quit-ad {
   position: relative; display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px;
-  border-radius: 12px; background: #eefaf2; border: 1px solid #bfe6cc; color: #134e2a; text-align: left;
+  border-radius: 12px; background: #fdf0f0; border: 1px solid #f3c4c6; color: #7a1f22; text-align: left;
 }
 .qa-badge {
-  flex: none; padding: 2px 7px; border-radius: 8px; background: #1f9d55; color: #fff;
+  flex: none; padding: 2px 7px; border-radius: 8px; background: var(--nonsmoking); color: #fff;
   font-size: 11px; font-weight: 700; white-space: nowrap;
 }
 .qa-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 13px; line-height: 1.45; }
 .qa-text b { font-size: 14px; font-weight: 700; }
 .qa-close {
   margin-left: auto; flex: none; width: 24px; height: 24px; border: none; border-radius: 50%;
-  background: none; color: #4b7a5c; font-size: 12px; cursor: pointer;
+  background: none; color: #9a4a4c; font-size: 12px; cursor: pointer;
 }
 .qa-close:hover { background: rgba(0,0,0,.06); }
 .quit-ad.float { width: 300px; box-shadow: 0 4px 16px rgba(0,0,0,.18); }
@@ -455,7 +455,7 @@ body { margin: 0; font-family: system-ui, "Noto Sans KR", sans-serif; }
   font-size: 11px; font-weight: 700; color: #fff; background: #888;
 }
 .ts-bus .ts-badge { background: #1e88e5; }
-.ts-subway .ts-badge { background: #1f9d55; }
+.ts-subway .ts-badge { background: #7b4fd6; }
 .ts-walking .ts-badge { background: #aaa; }
 .ts-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; color: #333; }
 .ts-body small { color: #777; font-size: 12px; }
