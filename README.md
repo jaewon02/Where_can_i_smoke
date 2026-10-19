@@ -11,8 +11,9 @@ React(Vite) + FastAPI + SQLite + 카카오맵
 ```bash
 # 백엔드 (터미널 1)
 cd backend
-.venv/Scripts/python seed.py                    # 샘플 데이터 (최초 1회)
-.venv/Scripts/uvicorn main:app --reload --port 8001
+uv sync                                        # 의존성 설치 (.venv 생성)
+uv run python seed.py                          # 샘플 데이터 (최초 1회)
+uv run uvicorn main:app --reload --port 8001
 
 # 프런트엔드 (터미널 2)
 cd frontend
@@ -24,7 +25,7 @@ npm run dev     # http://localhost:5173
 - 흡연구역 마커를 누르면 오른쪽 패널에서 사진·후기를 보고 작성할 수 있습니다. (비흡연구역은 말풍선만, 후기 작성은 API에서도 차단)
 - 업로드 사진은 `backend/uploads/`에 저장됩니다 (JPG/PNG/WEBP, 장당 5MB, 후기당 4장).
 - 샘플 후기의 사진은 외부 더미 이미지(picsum.photos)라서 인터넷 연결이 필요합니다.
-- 샘플을 지우고 다시 넣기: `python seed.py --reset` (샘플 구역의 후기도 함께 삭제됨)
+- 샘플을 지우고 다시 넣기: `uv run python seed.py --reset` (샘플 구역의 후기도 함께 삭제됨)
 
 ## 금연구역 자동 표시
 `frontend/src/facilities.js`의 규칙대로 송파구의 금연구역을 지도에 자동으로 그립니다. 축소/확대와 상관없이 화면에 보이는 영역 전체가 대상이고,
@@ -49,12 +50,12 @@ npm run dev     # http://localhost:5173
 **데이터 준비** (처음 받은 PC에서는 이것만 하면 됩니다. 카카오/OSM 접속 불필요)
 ```bash
 cd backend
-python facilities_tool.py load     # data/facilities_songpa.json -> DB (시설 2,521개, 경계선 구역 포함)
+uv run python facilities_tool.py load     # data/facilities_songpa.json -> DB (시설 2,521개, 경계선 구역 포함)
 ```
 **데이터를 새로 만들려면**
 1. 시설 위치 수집: `tools/collect_facilities.js` 상단 설명대로 브라우저에서 실행 (카카오 장소 검색, 송파구를 격자로 나눠 빠짐없이 수집)
-2. 경계선 계산: `python facilities_tool.py build [--refresh]` (OSM Overpass에서 윤곽선/출입구를 받아 구역 계산)
-3. 저장소용 파일 갱신: `python facilities_tool.py export`
+2. 경계선 계산: `uv run python facilities_tool.py build [--refresh]` (OSM Overpass에서 윤곽선/출입구를 받아 구역 계산)
+3. 저장소용 파일 갱신: `uv run python facilities_tool.py export`
 
 지도 윤곽선 데이터: © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright) (ODbL). 화면 오른쪽 아래에 출처를 표시합니다.
 
@@ -65,10 +66,10 @@ python facilities_tool.py load     # data/facilities_songpa.json -> DB (시설 2
 1. `backend/.env.example`을 복사해 `backend/.env`를 만들고 두 키를 입력합니다.
    - `DATA_API_KEY`: 공공데이터포털 일반 인증키(Decoding)
    - `KAKAO_REST_API_KEY`: 카카오 REST API 키 (서버 전용, 프런트엔드에 넣지 마세요)
-2. 먼저 확인만: `python sync.py --dry-run`
-3. DB에 반영: `python sync.py` (다시 실행해도 중복되지 않고, 변환 결과는 캐시됩니다)
+2. 먼저 확인만: `uv run python sync.py --dry-run`
+3. DB에 반영: `uv run python sync.py` (다시 실행해도 중복되지 않고, 변환 결과는 캐시됩니다)
 4. API 인증키 승인을 기다리는 동안에는 같은 내용의 CSV로 대신할 수 있습니다:
-   `python sync.py --csv data/songpa_smoking.csv` (UTF-8/CP949 자동 인식)
+   `uv run python sync.py --csv data/songpa_smoking.csv` (UTF-8/CP949 자동 인식)
    - `backend/data/`에 CSV와 미리 변환해 둔 좌표(`geocode_songpa.json`)가 들어 있어 **키 없이도** 실행됩니다.
    - 같은 건물의 흡연구역이 여러 개면 이름에 번호를 붙이고 마커를 7m 정도 펼쳐서 겹치지 않게 합니다. (위치는 건물 단위이며 실제 흡연 지점이 아닙니다)
    - `오금로 56수협`은 주소 오류라 수협중앙회 본사(오금로 62) 좌표로 추정했습니다. 확인이 필요합니다.
