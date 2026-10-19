@@ -43,7 +43,9 @@ export const FACILITY_TYPES = [
   { key: "bus", label: "버스정류장", keyword: "정류장", basis: "ordinance", source: ORD, rule: "버스 승차대(정류소)에서 10m 이내 금연", match: (p) => p.category_name?.includes("교통시설") && p.place_name.includes("정류장") && !/셔틀|고속|시외/.test(p.place_name + p.category_name) },
   // 지하철은 역 중심이 아니라 출입구 기준 (출입구는 OSM에서 가져옴). 카카오 지하철역 점은 출입구 이름을 붙이는 데만 씀
   { key: "subway", label: "지하철역", keyword: "지하철역", basis: "ordinance", source: ORD, rule: "", hidden: true, match: (p) => p.category_group_code === "SW8" },
-  { key: "subway-exit", label: "지하철 출입구", basis: "ordinance", source: ORD, rule: "출입구에서 10m 이내 금연 (거리는 조례별로 다름)", collect: false },
+  { key: "subway-exit", label: "지하철 출입구", basis: "ordinance", source: "서울시·강남구 조례 (강남구보건소 안내)", rule: "출입구에서 10m 이내 금연", collect: false },
+  // 구청이 조례로 지정한 금연거리: backend/data/streets_gangnam.json 의 구간을 OSM 도로 위의 구역으로 옮긴 것 (근사 범위)
+  { key: "no-smoking-street", label: "금연거리", basis: "ordinance", source: "서울특별시 강남구 금연환경 조성 및 간접흡연 피해방지 조례 제5조 (강남구보건소 금연거리 현황, 2026.7.31 기준)", rule: "구청이 지정한 금연거리 (보도 포함)", collect: false, approx: true },
   { key: "park", label: "공원", keyword: "공원", basis: "ordinance", source: ORD, rule: "공원 금연 (범위는 조례별로 다름)", match: (p) => p.category_name?.includes("공원") },
 ];
 

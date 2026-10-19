@@ -120,3 +120,6 @@ body { margin: 0; font-family: system-ui, "Noto Sans KR", sans-serif; }
     @apply bg-background text-foreground; }
   html {
     @apply font-sans; } }
+
+/* 금연구역은 많이 확대했을 때만 보이므로, 넓게 보고 있을 때 안내 */
+.hint { position: absolute; left: 50%; bottom: 30px; transform: translateX(-50%); z-index: 5; padding: 8px 16px; border-radius: 20px; background: rgba(255,255,255,.94); box-shadow: 0 2px 8px rgba(0,0,0,.22); font-size: 13px; color: #444; pointer-events: none; white-space: nowrap; }

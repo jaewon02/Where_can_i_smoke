@@ -1,6 +1,7 @@
 """금연 규칙 대상 시설(facilities 테이블) 도구
 
     python facilities_tool.py build  --region gangnam [--refresh]   # 시설 경계선(OSM)을 찾아 금연 구역 계산 -> DB
+    python facilities_tool.py streets --region gangnam [--refresh]  # 구청이 지정한 금연거리(data/streets_gangnam.json) -> 도로 위 구역
     python facilities_tool.py export --region gangnam               # DB -> data/facilities_gangnam.json
     python facilities_tool.py load   [--region gangnam]             # data/facilities_*.json -> DB (지역 생략하면 전부)
 
@@ -20,6 +21,7 @@ import json
 import math
 import re
 import sys
+import time
 from pathlib import Path
 
 import httpx
@@ -265,6 +267,231 @@ def build(region: str, refresh: bool) -> None:
     print(f"완료: 시설 {total}개")
 
 
+# ───────────────────────── 금연거리(조례로 지정한 거리) ─────────────────────────
+# 구청이 공개한 구간 설명(시작점~끝점, 길이)을 OSM 도로 위의 구역으로 옮긴다. 정확한 보도 경계가 아니라 도로 중심선에서
+# 양쪽으로 STREET_BUFFER_M 만큼 넓힌 근사 범위이며, 도로를 따라 잰 길이가 공식 길이와 맞는 구간만 그린다.
+STREET_BUFFER_M = 14
+STREET_RATIO_OK = (0.85, 1.20)  # 도로를 따라 잰 길이 / 공식 길이 허용 범위
+ROAD_SKIP = {"service", "construction", "steps", "pedestrian", "footway", "path"}
+SCHOOL_KEYS = ("elementary", "middle", "high")
+
+
+def fetch_roads(region: str, names: list[str], refresh: bool) -> list[dict]:
+    """금연거리에 나오는 도로 이름의 OSM 도로(way)를 받아 캐시"""
+    cache = CACHE_DIR / f"roads_{region}.json"
+    if cache.exists() and not refresh:
+        saved = json.loads(cache.read_text(encoding="utf-8"))
+        if set(names) <= set(saved["names"]):
+            return saved["elements"]
+    s_, w_, n_, e_ = REGIONS[region]["bbox"]
+    pattern = "|".join(sorted(set(names)))
+    query = (
+        "[out:json][timeout:120];\n"
+        f'way["highway"]["name"~"^({pattern})$"]({s_},{w_},{n_},{e_});\n'
+        "out tags geom;"
+    )
+    for attempt in range(1, 4):  # Overpass 가 바쁠 때(502 등) 잠시 기다렸다 다시 시도
+        resp = httpx.post(
+            OVERPASS_URL, data={"data": query},
+            headers={"User-Agent": "smoking-zone-map-dev/0.1", "Accept": "application/json"}, timeout=180,
+        )
+        if resp.status_code < 500 or attempt == 3:
+            break
+        time.sleep(20 * attempt)
+    resp.raise_for_status()
+    elements = resp.json()["elements"]
+    cache.parent.mkdir(exist_ok=True)
+    cache.write_text(json.dumps({"names": sorted(set(names)), "elements": elements}, ensure_ascii=False), encoding="utf-8")
+    return elements
+
+
+def _ways(elements: list[dict], name: str) -> list[dict]:
+    return [e for e in elements if e["tags"].get("name") == name]
+
+
+def _graph(ways: list[dict]):
+    """도로 구간들을 좌표가 같은 점끼리 이어서 (그래프, 점 좌표) 로"""
+    g: dict = {}
+    pts: dict = {}
+    for e in ways:
+        if e["tags"].get("highway") in ROAD_SKIP:
+            continue
+        geom = [(round(p["lat"], 6), round(p["lon"], 6)) for p in e["geometry"]]
+        for a, b in zip(geom, geom[1:]):
+            pa, pb = pt_m(a[1], a[0]), pt_m(b[1], b[0])
+            pts[a], pts[b] = pa, pb
+            w = math.hypot(pa[0] - pb[0], pa[1] - pb[1])
+            g.setdefault(a, []).append((b, w))
+            g.setdefault(b, []).append((a, w))
+    return g, pts
+
+
+def _shortest(g, s, t):
+    import heapq
+
+    dist_, prev, pq = {s: 0.0}, {}, [(0.0, s)]
+    while pq:
+        c, u = heapq.heappop(pq)
+        if u == t:
+            break
+        if c > dist_.get(u, 1e18):
+            continue
+        for v, w in g[u]:
+            if c + w < dist_.get(v, 1e18):
+                dist_[v], prev[v] = c + w, u
+                heapq.heappush(pq, (c + w, v))
+    if t not in dist_:
+        return None
+    path = [t]
+    while path[-1] != s:
+        path.append(prev[path[-1]])
+    return path[::-1]
+
+
+def road_path(ways: list[dict], a: dict, b: dict) -> LineString | None:
+    """도로 이름이 같은 길 위에서 시작점~끝점을 잇는 최단 경로 (미터 좌표). 큰 도로는 방향별 차로가 따로 있어서
+    차로(연결된 덩어리)마다 구해 두 점에 가장 가까운 쪽을 고름. 시작/끝점(출구 등)까지의 짧은 연결선도 포함"""
+    g, pts = _graph(ways)
+    comp: dict = {}
+    n_comp = 0
+    for start in g:  # 연결된 덩어리 나누기
+        if start in comp:
+            continue
+        comp[start] = n_comp
+        stack = [start]
+        while stack:
+            u = stack.pop()
+            for v, _ in g[u]:
+                if v not in comp:
+                    comp[v] = n_comp
+                    stack.append(v)
+        n_comp += 1
+    pa, pb = pt_m(a["lng"], a["lat"]), pt_m(b["lng"], b["lat"])
+    best = None
+    for c in range(n_comp):
+        members = [k for k, v in comp.items() if v == c]
+        ka = min(members, key=lambda k: math.hypot(pts[k][0] - pa[0], pts[k][1] - pa[1]))
+        kb = min(members, key=lambda k: math.hypot(pts[k][0] - pb[0], pts[k][1] - pb[1]))
+        if ka == kb:
+            continue
+        path = _shortest(g, ka, kb)
+        if not path:
+            continue
+        score = math.hypot(pts[ka][0] - pa[0], pts[ka][1] - pa[1]) + math.hypot(pts[kb][0] - pb[0], pts[kb][1] - pb[1])
+        if best is None or score < best[0]:
+            best = (score, [pa] + [pts[k] for k in path] + [pb])
+    return LineString(best[1]) if best else None
+
+
+def _school_geom(conn, name: str):
+    """DB에서 학교 이름으로 경계선(구역) 도형(미터)을 찾음"""
+    norm = lambda t: re.sub(r"\s+", "", t)  # noqa: E731
+    marks = ",".join("?" * len(SCHOOL_KEYS))
+    rows = list(conn.execute(f"SELECT name, lat, lng, area FROM facilities WHERE type_key IN ({marks})", SCHOOL_KEYS))
+    # 이름이 정확히 같은 학교를 먼저, 없으면 '서울언북초등학교'처럼 이름이 포함된 학교를 사용
+    for same in (lambda n: norm(n) == norm(name), lambda n: norm(name) in norm(n)):
+        for r in rows:
+            if same(r["name"]):
+                if r["area"]:
+                    polys = [Polygon([pt_m(x, y) for x, y in rings[0]]) for rings in json.loads(r["area"])]
+                    return unary_union(polys)
+                return Point(*pt_m(r["lng"], r["lat"])).buffer(60)
+    return None
+
+
+def clip_near(lines: list, school, official_m: float):
+    """학교 주변 금연거리의 길 한 개를 도형으로. 반환: (도형 또는 None, 설명)
+    - 길 전체 길이가 공식 길이와 비슷하면 전체를 씀
+    - 같은 이름의 길이 더 길게 이어지면, 학교에서 가까운 부분부터 공식 길이만큼만 씀
+    - 학교 경계선 30m 구역이 이미 공식 길이만큼 덮고 있으면 따로 그릴 필요가 없어서 None"""
+    merged = unary_union(lines)
+    if merged.length <= official_m * STREET_RATIO_OK[1]:
+        return merged, "전체"
+    if merged.intersection(school).length >= official_m * 0.8:
+        return None, "학교 30m 구역에 이미 포함"
+    part = merged
+    for d in range(0, 401, 1):
+        part = merged.intersection(school.buffer(d))
+        if part.length >= official_m:
+            return part, f"학교에서 가까운 {d}m 이내"
+    return part, "학교에서 400m 이내 전부"
+
+
+def streets(region: str, refresh: bool) -> None:
+    spec_file = DATA_DIR / f"streets_{region}.json"
+    if not spec_file.exists():
+        sys.exit(f"{spec_file.name} 이 없습니다")
+    spec = json.loads(spec_file.read_text(encoding="utf-8"))
+    names = [s["road"] for s in spec["road_segments"]] + [p["road"] for ps in spec["paired_segments"] for p in ps["parts"]]
+    names += [st["name"] for sc in spec["school_streets"] for st in sc["streets"]]
+    elements = fetch_roads(region, names, refresh)
+    init_db()
+    ok_lo, ok_hi = STREET_RATIO_OK
+    rows, report = [], []
+
+    def add(sid, label, geoms, official, measured, how, sides=1):
+        ratio = measured * sides / official if official else None
+        ok = bool(ratio and ok_lo <= ratio <= ok_hi)
+        report.append((label, official, round(measured * sides), f"{ratio:.2f}" if ratio else "-", how, "OK" if ok else "길이 불일치(그리지 않음)"))
+        if not ok:
+            return
+        union = unary_union(geoms)
+        area = to_area_json(union, STREET_BUFFER_M)
+        c = shapely.transform(union.representative_point(), to_ll)
+        rows.append((f"street:{sid}", "no-smoking-street", label, c.y, c.x, area, None))
+
+    with get_conn() as conn:
+        for sg in spec["road_segments"]:
+            line = road_path(_ways(elements, sg["road"]), sg["from"], sg["to"])
+            if line is None:
+                report.append((sg["label"], sg["official_m"], 0, "-", "경로 없음", "그리지 않음"))
+                continue
+            add(sg["id"], sg["label"], [line], sg["official_m"], line.length, f"{sg['from']['name']}~{sg['to']['name']}", sg["sides"])
+        for pg in spec["paired_segments"]:
+            lines = [road_path(_ways(elements, p["road"]), p["from"], p["to"]) for p in pg["parts"]]
+            if any(ln is None for ln in lines):
+                report.append((pg["label"], pg["official_total_m"], 0, "-", "경로 없음", "그리지 않음"))
+                continue
+            add(pg["id"], pg["label"], lines, pg["official_total_m"], sum(ln.length for ln in lines), " + ".join(p["road"] for p in pg["parts"]), pg["sides"])
+        for sc in spec["school_streets"]:
+            official_total = sum(st["official_m"] for st in sc["streets"])
+            school = _school_geom(conn, sc["school"])
+            if school is None:
+                report.append((sc["label"], official_total, 0, "-", f"학교를 DB에서 못 찾음: {sc['school']}", "그리지 않음"))
+                continue
+            geoms, total, drawn_official, hows = [], 0.0, 0, []
+            for st in sc["streets"]:
+                lines = []
+                for w in _ways(elements, st["name"]):
+                    pts = [pt_m(p["lon"], p["lat"]) for p in w["geometry"]]
+                    if len(pts) >= 2:
+                        lines.append(LineString(pts))
+                if not lines:
+                    hows.append(f"{st['name']}: OSM에 없음")
+                    continue
+                part, how = clip_near(lines, school, st["official_m"])
+                if part is None or part.is_empty:
+                    hows.append(f"{st['name']}({how})")
+                    continue
+                geoms.append(part)
+                total += part.length
+                drawn_official += st["official_m"]  # 길이 검증은 실제로 그린 길만 공식 길이와 비교
+                hows.append(f"{st['name']}({how})")
+            if not geoms:
+                report.append((sc["label"], official_total, 0, "-", "; ".join(hows), "학교 30m 구역에 포함(따로 그리지 않음)"))
+                continue
+            add(sc["id"], sc["label"], geoms, drawn_official, total, "; ".join(hows))
+        where, params_bbox = in_bbox_sql(REGIONS[region]["bbox"])
+        conn.execute(f"DELETE FROM facilities WHERE kakao_id LIKE 'street:%' AND {where}", params_bbox)
+        conn.executemany(
+            "INSERT OR REPLACE INTO facilities (kakao_id, type_key, name, lat, lng, area, r) VALUES (?,?,?,?,?,?,?)", rows
+        )
+    print(f"{'구간':34}{'공식m':>7}{'측정m':>7}{'비율':>6}  검증 / 방법")
+    for label, official, measured, ratio, how, status in report:
+        print(f"{label[:30]:34}{official:>7}{measured:>7}{ratio:>6}  {status} / {how}")
+    print(f"금연거리 {len(rows)}개 저장, 제외 {len(report) - len(rows)}개 (설명 파일의 skipped 항목 {len(spec.get('skipped', []))}개는 처음부터 제외)")
+
+
 def export(region: str) -> None:
     data_file, _ = region_files(region)
     where, params_bbox = in_bbox_sql(REGIONS[region]["bbox"])
@@ -305,6 +532,8 @@ if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
     if cmd == "build":
         build(get_region(sys.argv), "--refresh" in sys.argv)
+    elif cmd == "streets":
+        streets(get_region(sys.argv), "--refresh" in sys.argv)
     elif cmd == "export":
         export(get_region(sys.argv))
     elif cmd == "load":
