@@ -18,6 +18,7 @@
 """
 import json
 import math
+import re
 import sys
 from pathlib import Path
 
@@ -113,6 +114,7 @@ def fetch_osm(region: str, refresh: bool) -> dict:
   nwr["amenity"~"^(school|kindergarten|childcare|hospital|library)$"]{box};
   nwr["leisure"~"^(park|playground)$"]{box};
   node["railway"="subway_entrance"]{box};
+  node["highway"="bus_stop"]{box};
 );
 out tags geom;"""
     resp = httpx.post(
@@ -245,10 +247,20 @@ def build(region: str, refresh: bool) -> None:
             ref = el["tags"].get("ref")
             extras.append((f"osm:node/{el['id']}", "subway-exit", f"{name} {ref}번 출입구" if ref else f"{name} 출입구", el["lat"], el["lon"], None, 10.0))
             exits += 1
+        # 버스정류장: 서울시 조례는 '버스정류소 및 택시 승차대'를 금연구역으로 지정하지만 거리 규정은 없음 -> 정류장 위치에 임시 반경
+        buses = 0
+        for el in elements:
+            tags = el.get("tags", {})
+            if tags.get("highway") != "bus_stop" or el["type"] != "node":
+                continue
+            nm = (tags.get("name") or "").strip()
+            name = (nm if re.search("정류장|정류소", nm) else f"{nm} 버스정류장") if nm else "버스정류장"
+            extras.append((f"osm:node/{el['id']}", "bus", name, el["lat"], el["lon"], None, float(RULES["bus"][1])))
+            buses += 1
         conn.executemany(
             "INSERT OR REPLACE INTO facilities (kakao_id, type_key, name, lat, lng, area, r) VALUES (?,?,?,?,?,?,?)", extras
         )
-        print(f"OSM에서 추가: 공원/놀이터 {len(extras) - exits}개, 지하철 출입구 {exits}개")
+        print(f"OSM에서 추가: 공원/놀이터 {len(extras) - exits - buses}개, 지하철 출입구 {exits}개, 버스정류장 {buses}개")
         total = conn.execute("SELECT COUNT(*) FROM facilities").fetchone()[0]
     print(f"완료: 시설 {total}개")
 

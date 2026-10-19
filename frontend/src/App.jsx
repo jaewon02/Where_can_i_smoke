@@ -4,7 +4,8 @@ import { RULE_BY_KEY } from "./facilities.js";
 import ZonePanel from "./ZonePanel.jsx";
 import { buildAreas } from "./areas.js";
 
-const COLORS = { smoking: "#e5484d", nonsmoking: "#1f9d55" };
+// 흡연자 기준 색: 피워도 되는 곳(흡연구역)은 초록, 피우면 안 되는 곳(금연구역)은 빨강. styles.css 의 --smoking / --nonsmoking 과 같은 값
+const COLORS = { smoking: "#1f9d55", nonsmoking: "#e5484d" };
 const BADGE_MAX_LEVEL = 2; // 이 지도 레벨 이하로 확대했을 때만 금연구역 배지 표시
 
 // 시설 범위의 큰 쪽 길이(m): 경계선 다각형이면 그 바깥 사각형, 아니면 반경 원의 지름

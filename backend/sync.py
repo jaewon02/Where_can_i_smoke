@@ -2,6 +2,7 @@
 
     python sync.py                    # 공공데이터 API 호출 (.env에 두 키 필요)
     python sync.py --csv 파일.csv     # API 대신 같은 내용의 CSV 사용 (카카오 키만 필요)
+    python sync.py --csv 파일.csv --schema seocho   # CSV 컬럼 형식 지정 (songpa 기본, seocho)
     python sync.py --dry-run ...      # DB에 쓰지 않고 결과만 출력
 
 필요한 키 (backend/.env):
@@ -95,26 +96,52 @@ def geocode(client: httpx.Client, conn, address: str) -> tuple[float, float] | N
     return (lat, lng) if lat is not None else None
 
 
-def to_zone(row: dict, lat: float, lng: float, k: int = 0, n: int = 1, pk: int = 0, pn: int = 1) -> tuple:
-    """같은 건물의 흡연구역이 n개면 이름에 번호(k)를 붙이고, 같은 좌표에 겹치는 구역이 pn개면 좌표(pk)를 조금씩 펼침.
+def _short(text: str, n: int = 40) -> str:
+    return text if len(text) <= n else text[: n - 1] + "…"
+
+
+# 데이터셋마다 컬럼이 달라서 형식별로 (이름, 주소, 설명, 같은 시설로 묶는 기준)을 정의
+SCHEMAS = {
+    # 서울특별시 송파구_실외흡연구역 위치: 연번, 건물명, 도로명주소, 구분(개방형 등), 데이터기준일자
+    "songpa": lambda r: {
+        "name": f"{(r.get('건물명') or '').strip() or (r.get('도로명주소') or '').strip()} 흡연구역",
+        "address": (r.get("도로명주소") or "").strip(),
+        "note": f"{(r.get('구분') or '').strip()} 흡연구역" if (r.get("구분") or "").strip() else None,
+        "group": (r.get("건물명"), r.get("도로명주소")),
+    },
+    # 서울특별시 서초구_흡연시설 현황: 연번, 자치구명, 해당동, 시설형태, 추가시설, 설치위치(주소 또는 설명), 규모, 설치주체, ...
+    "seocho": lambda r: {
+        "name": _short((r.get("설치위치") or "").strip()),
+        "address": (r.get("설치위치") or "").strip(),
+        "note": " · ".join(
+            x for x in [(r.get("시설형태") or "").strip(), (r.get("규모") or "").strip(), (r.get("추가시설") or "").strip(),
+                        f"설치주체 {(r.get('설치주체') or '').strip()}" if (r.get("설치주체") or "").strip() else ""] if x
+        ),
+        "group": (r.get("설치위치"),),
+    },
+}
+
+
+def to_zone(info: dict, lat: float, lng: float, k: int = 0, n: int = 1, pk: int = 0, pn: int = 1) -> tuple:
+    """같은 시설의 흡연구역이 n개면 이름에 번호(k)를 붙이고, 같은 좌표에 겹치는 구역이 pn개면 좌표(pk)를 조금씩 펼침.
     위치는 건물(주소) 단위라 정확한 흡연 지점은 아님"""
-    building = (row.get("건물명") or "").strip()
-    kind = (row.get("구분") or "").strip()
-    address = (row.get("도로명주소") or "").strip()
-    name = f"{building} 흡연구역" if building else f"{address} 흡연구역"
+    name = info["name"]
     if n > 1:
         name += f" {k + 1}"
     if pn > 1:
         theta = 2 * math.pi * pk / pn
         lat += SPREAD_M * math.cos(theta) / 111_320
         lng += SPREAD_M * math.sin(theta) / (111_320 * math.cos(math.radians(lat)))
-    note = f"{kind} 흡연구역" if kind else None
-    return (name, "smoking", round(lat, 7), round(lng, 7), address, note, None)
+    return (name, "smoking", round(lat, 7), round(lng, 7), info["address"], info["note"], None)
 
 
 def main() -> None:
     dry = "--dry-run" in sys.argv
     csv_path = sys.argv[sys.argv.index("--csv") + 1] if "--csv" in sys.argv else None
+    schema_name = sys.argv[sys.argv.index("--schema") + 1] if "--schema" in sys.argv else "songpa"
+    if schema_name not in SCHEMAS:
+        raise SystemExit(f"--schema 는 {', '.join(SCHEMAS)} 중 하나여야 합니다")
+    schema = SCHEMAS[schema_name]
     if not csv_path and not DATA_API_KEY:
         raise SystemExit("backend/.env에 DATA_API_KEY를 입력하세요 (또는 --csv 파일.csv 사용)")
 
@@ -125,22 +152,22 @@ def main() -> None:
         rows = read_csv(csv_path) if csv_path else fetch_rows(client)
         print(f"{'CSV' if csv_path else '공공데이터'} {len(rows)}건 읽음")
         for row in rows:
-            address = (row.get("도로명주소") or "").strip()
-            pos = geocode(client, conn, address) if address else None
+            info = schema(row)
+            pos = geocode(client, conn, info["address"]) if info["address"] else None
             if not pos:
-                failed.append(f"{row.get('건물명')} / {address}")
+                failed.append(f"{info['name']} / {info['address']}")
                 continue
-            found.append((row, pos))
-        # 같은 건물(건물명+주소)에 흡연구역이 여러 개인 경우 구분해서 저장
-        counts = Counter((row.get("건물명"), row.get("도로명주소")) for row, _ in found)
+            found.append((info, pos))
+        # 같은 시설에 흡연구역이 여러 개인 경우 구분해서 저장
+        counts = Counter(info["group"] for info, _ in found)
         addr_counts = Counter(pos for _, pos in found)  # 같은 좌표에 겹치는 구역 수
         seen, addr_seen = Counter(), Counter()
         zones = []
-        for row, pos in found:
-            key, addr = (row.get("건물명"), row.get("도로명주소")), pos
-            zones.append(to_zone(row, *pos, k=seen[key], n=counts[key], pk=addr_seen[addr], pn=addr_counts[addr]))
+        for info, pos in found:
+            key = info["group"]
+            zones.append(to_zone(info, *pos, k=seen[key], n=counts[key], pk=addr_seen[pos], pn=addr_counts[pos]))
             seen[key] += 1
-            addr_seen[addr] += 1
+            addr_seen[pos] += 1
 
         if dry:
             for z in zones:

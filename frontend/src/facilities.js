@@ -40,7 +40,7 @@ export const FACILITY_TYPES = [
   { key: "office-community", label: "공공기관 청사", keyword: "주민센터", basis: "law", source: LAW, rule: WHOLE_SITE, match: (p) => p.category_group_code === "PO3" },
   { key: "office-district", label: "공공기관 청사", keyword: "구청", basis: "law", source: LAW, rule: WHOLE_SITE, match: (p) => p.category_group_code === "PO3" },
   // ── 지자체 조례 ──
-  { key: "bus", label: "버스정류장", keyword: "정류장", basis: "ordinance", source: ORD, rule: "정류장 주변 금연 (거리는 조례별로 다름, 여기서는 10m로 표시)", match: (p) => p.category_name?.includes("교통시설") && p.place_name.includes("정류장") && !/셔틀|고속|시외/.test(p.place_name + p.category_name) },
+  { key: "bus", label: "버스정류장", keyword: "정류장", basis: "ordinance", source: ORD, rule: "버스 승차대(정류소)에서 10m 이내 금연", match: (p) => p.category_name?.includes("교통시설") && p.place_name.includes("정류장") && !/셔틀|고속|시외/.test(p.place_name + p.category_name) },
   // 지하철은 역 중심이 아니라 출입구 기준 (출입구는 OSM에서 가져옴). 카카오 지하철역 점은 출입구 이름을 붙이는 데만 씀
   { key: "subway", label: "지하철역", keyword: "지하철역", basis: "ordinance", source: ORD, rule: "", hidden: true, match: (p) => p.category_group_code === "SW8" },
   { key: "subway-exit", label: "지하철 출입구", basis: "ordinance", source: ORD, rule: "출입구에서 10m 이내 금연 (거리는 조례별로 다름)", collect: false },
