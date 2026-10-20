@@ -44,4 +44,4 @@ USERS_DB=users.db
 | 표 | 컬럼 |
 |---|---|
 | `users` | `id`, `nickname`, `user_id`, `password_hash`, `created_at` |
-| `reviews` | `id`, `target_type`(`zone`/`place`), `target_id`, `author_id`(→ `users.id`), `rating`(1~5), `content`(1~500자), `created_at` |
+| `reviews` | `id`, `target_type`, `target_id`, `author_id`, `rating`, `content`, `created_at` |
