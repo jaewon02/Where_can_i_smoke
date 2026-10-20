@@ -142,7 +142,7 @@ function TransitStep({ seg }) {
 }
 
 // 사이드바 길찾기 화면: 출발 → 도착 경로 (도보·대중교통: 카카오맵 / 자동차: 카카오모빌리티)
-export default function RoutePanel({ kakao, getCenter, myPos, start, end, setStart, setEnd, smoking, onSmokingChange, onLocate, onShowRoute, onClearRoute, onBack }) {
+export default function RoutePanel({ kakao, getCenter, myPos, start, end, setStart, setEnd, smoking, onLocate, onShowRoute, onClearRoute, onBack }) {
   const [mode, setMode] = useState("walk");
   const [route, setRoute] = useState(null);
   const [option, setOption] = useState(0); // 대중교통: 여러 경로 중 몇 번째를 볼지
@@ -216,13 +216,6 @@ export default function RoutePanel({ kakao, getCenter, myPos, start, end, setSta
           ←
         </button>
         <h2>길찾기</h2>
-        <label className={`smoke-toggle ${smoking ? "on" : ""}`} title="중간에 흡연구역을 들렀다 가요 (도보·자동차)">
-          <span>흡연모드</span>
-          <input type="checkbox" role="switch" checked={smoking} onChange={(e) => onSmokingChange(e.target.checked)} />
-          <span className="st-track" aria-hidden="true">
-            <span className="st-thumb" />
-          </span>
-        </label>
       </header>
 
       <div className="route-modes" role="tablist" aria-label="이동 수단">
@@ -341,7 +334,7 @@ export default function RoutePanel({ kakao, getCenter, myPos, start, end, setSta
         </p>
       )}
       <div className="route-ads">
-        <QuitAd slot={1} />
+        {smoking && <QuitAd slot={1} />}
         {smoking && <QuitAd slot={2} />}
       </div>
     </div>

@@ -82,14 +82,12 @@ export default function App() {
   const [rouletteOpen, setRouletteOpen] = useState(false); // 오늘의 담배 룰렛
   const [routeStart, setRouteStart] = useState(ME); // 길찾기 출발지 (기본: 내 위치)
   const [routeEnd, setRouteEnd] = useState(null); // 길찾기 도착지
-  const [smokingMode, setSmokingMode] = useState(false); // 길찾기 흡연모드 (켜면 금연 안내가 더 많이 뜸)
-  const [adClosed, setAdClosed] = useState(false); // 지도 위 금연 안내 카드 닫음 (흡연모드에선 못 닫음)
   const [selectedId, setSelectedId] = useState(null); // 정보 카드를 띄운 흡연구역 (사이드바 목록 선택 표시)
   const { user, remember } = useAuth();
   const [loginOpen, setLoginOpen] = useState(false); // 후기 보기를 눌렀는데 로그인 전이면 띄우는 로그인 창
   const pendingReviewRef = useRef(null); // 로그인 뒤 후기 패널을 열 구역
   const [reviewZone, setReviewZone] = useState(null); // 오른쪽 후기 패널에 보여줄 흡연구역 (지도에서 불러온 구역 정보)
-  const [showSmoking, setShowSmoking] = useState(false); // 흡연모드 (켜야 흡연구역 핀이 보임)
+  const [showSmoking, setShowSmoking] = useState(false); // 흡연모드 (지도 왼쪽 위 버튼). 켜면 흡연구역 핀이 보이고, 길찾기에서 흡연구역을 들르고, 금연 안내와 오늘의 담배가 나타남 (꺼져 있으면 안 보임)
   const [showNon, setShowNon] = useState(true); // 비흡연구역 + 주변 금연시설
   const [zoomLevel, setZoomLevel] = useState(6); // 지금 지도 확대 레벨 (금연구역을 보여줄지 안내하는 데 사용)
   const flagsRef = useRef({});
@@ -677,11 +675,7 @@ export default function App() {
             end={routeEnd}
             setStart={setRouteStart}
             setEnd={setRouteEnd}
-            smoking={smokingMode}
-            onSmokingChange={(on) => {
-              setSmokingMode(on);
-              if (on) setAdClosed(false);
-            }}
+            smoking={showSmoking}
             onLocate={locate}
             onShowRoute={showRoute}
             onClearRoute={clearRoute}
@@ -704,9 +698,11 @@ export default function App() {
               <span aria-hidden="true">🚶</span> 길찾기
               <span className="route-entry-arrow" aria-hidden="true">›</span>
             </button>
-            <button className="roulette-entry" onClick={() => setRouletteOpen(true)}>
-              <span aria-hidden="true">🎯</span> 오늘의 담배
-            </button>
+            {showSmoking && (
+              <button className="roulette-entry" onClick={() => setRouletteOpen(true)}>
+                <span aria-hidden="true">🎯</span> 오늘의 담배
+              </button>
+            )}
           </div>
           <SearchBox
             kakao={kakao}
@@ -724,9 +720,11 @@ export default function App() {
               onRoutePick={pickRoutePoint}
             />
           </SearchBox>
-          <div className="sidebar-ad">
-            <QuitAd slot={0} />
-          </div>
+          {showSmoking && (
+            <div className="sidebar-ad">
+              <QuitAd slot={0} />
+            </div>
+          )}
         </div>
         <button
           className="sidebar-tab"
@@ -740,15 +738,13 @@ export default function App() {
       </aside>
       {SHOW_NONSMOKING_AREAS && showNon && zoomLevel > AREA_MAX_LEVEL && <div className="hint">금연구역은 지도를 더 확대하면 보여요</div>}
       <div className="credit">경계선: © OpenStreetMap contributors</div>
-      {rouletteOpen && <Roulette onClose={() => setRouletteOpen(false)} />}
-      {/* 지도 위 금연 안내: 평소엔 오른쪽 아래 1개(닫기 가능), 흡연모드면 위쪽 띠 + 왼쪽 아래까지 더 띄움 */}
-      {(!adClosed || smokingMode) && (
-        <div className="map-ad right">
-          <QuitAd slot={5} variant="float" onClose={smokingMode ? undefined : () => setAdClosed(true)} />
-        </div>
-      )}
-      {smokingMode && (
+      {rouletteOpen && showSmoking && <Roulette onClose={() => setRouletteOpen(false)} />}
+      {/* 지도 위 금연 안내: 흡연모드를 켰을 때만 오른쪽 아래, 위쪽 띠, 왼쪽 아래에 띄움 */}
+      {showSmoking && (
         <>
+          <div className="map-ad right">
+            <QuitAd slot={5} variant="float" />
+          </div>
           <div className="map-ad top">
             <QuitAd slot={3} variant="strip" />
           </div>
