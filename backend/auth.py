@@ -55,7 +55,7 @@ def revoke_token(token: str) -> None:
 
 
 def current_user(cred: HTTPAuthorizationCredentials | None = Depends(bearer)) -> dict:
-    """Authorization: Bearer <표> 로 로그인한 사람을 찾음 (후기 쓰기 등에서도 사용 예정)"""
+    """Authorization: Bearer <표> 로 로그인한 사람을 찾음"""
     user = _tokens.get(cred.credentials) if cred else None
     if not user:
         raise HTTPException(401, "로그인이 필요합니다")

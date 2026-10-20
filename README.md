@@ -35,8 +35,6 @@ USERS_DB=users.db
 | 표 | 컬럼 |
 |---|---|
 | `zones` | `id`, `name`, `type`, `lat`, `lng`, `address`, `note`, `radius_m` |
-| `reviews` | `id`, `zone_id`, `author`, `rating`, `content`, `created_at` |
-| `review_photos` | `id`, `review_id`, `filename` |
 | `facilities` | `id`, `kakao_id`, `type_key`, `name`, `lat`, `lng`, `area`, `r` |
 | `geocode_cache` | `address`, `lat`, `lng` (예전 데이터 입력용. 현재 코드에서는 쓰지 않음) |
 
