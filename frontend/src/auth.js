@@ -24,6 +24,13 @@ function clearStored() {
   localStorage.removeItem(NICKNAME_KEY);
 }
 
+// 로그인 상태가 바뀌면 알림 -> 화면 곳곳의 useAuth(로그인 버튼, 지도 카드 등)가 같이 바뀜
+const AUTH_EVENT = "auth-change";
+const notify = () => window.dispatchEvent(new Event(AUTH_EVENT));
+
+// 지금 로그인되어 있는지 (React 밖, 예: 지도 위 카드에서 확인할 때)
+export const isLoggedIn = () => !!readStored();
+
 // 서버가 보낸 detail을 화면에 보일 문장으로 바꿈 (422는 칸별 오류 목록으로 옴)
 function errorMessage(detail) {
   if (typeof detail === "string") return detail;
@@ -81,14 +88,26 @@ export function useAuth() {
         if (err.status === 401) {
           clearStored();
           setUser(null);
+          notify();
         }
       });
+  }, []);
+
+  // 다른 곳에서 로그인/로그아웃하면 따라 바뀜
+  useEffect(() => {
+    const sync = () => {
+      const stored = readStored();
+      setUser(stored && { nickname: stored.nickname });
+    };
+    window.addEventListener(AUTH_EVENT, sync);
+    return () => window.removeEventListener(AUTH_EVENT, sync);
   }, []);
 
   // login/signup 이 돌려준 { token, nickname } 을 기억
   const remember = (result) => {
     saveStored(result);
     setUser({ nickname: result.nickname });
+    notify();
   };
 
   // 서버 응답과 관계없이 브라우저에서는 지움
@@ -96,6 +115,7 @@ export function useAuth() {
     const stored = readStored();
     clearStored();
     setUser(null);
+    notify();
     if (stored) await request("logout", { token: stored.token }).catch(() => {});
   };
 
