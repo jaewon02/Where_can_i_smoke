@@ -1,9 +1,12 @@
 import { useEffect, useRef } from "react";
+import LoginButton from "./LoginButton.jsx";
+import { useAuth } from "./auth.js";
 
 const TYPE_LABEL = { smoking: "흡연구역", nonsmoking: "비흡연구역" };
 
-// 오른쪽 후기 패널 (후기 보기). 흡연구역 또는 일반 장소(type: "place", label: 종류)의 정보만 보여주고 서버·DB는 따로 부르지 않음
+// 오른쪽 후기 패널 (후기 보기). 흡연구역 또는 일반 장소(type: "place", label: 종류)의 정보를 보여주고, 후기는 로그인한 사람에게만 보여줌
 export default function ZonePanel({ zone, onClose }) {
+  const { user } = useAuth(); // 패널이 열릴 때 서버에 로그인 상태를 다시 확인
   const closeRef = useRef(null);
 
   useEffect(() => {
@@ -35,7 +38,13 @@ export default function ZonePanel({ zone, onClose }) {
         {/* 후기는 아직 저장하는 곳(DB)이 없어서 '후기 없음'만 보여줌 */}
         <section aria-label="후기">
           <h3>후기</h3>
-          <p className="muted">아직 등록된 후기가 없어요.</p>
+          {user && <p className="muted">아직 등록된 후기가 없어요.</p>}
+          {user === null && (
+            <>
+              <p className="muted">로그인하면 후기를 볼 수 있어요.</p>
+              <LoginButton />
+            </>
+          )}
         </section>
       </div>
     </aside>
