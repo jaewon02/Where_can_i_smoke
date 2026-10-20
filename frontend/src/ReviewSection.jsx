@@ -4,6 +4,8 @@ import { useAuth } from "./auth.js";
 import { createReview, deleteReview, listReviews } from "./reviews.js";
 
 const CONTENT_MAX = 500;
+// 일반 장소는 카카오 장소 번호(숫자)만 후기를 받음. 버스정류장('bus-…')처럼 숫자가 아닌 번호는 서버도 거절함
+const PLACE_ID_RE = /^[0-9]{1,20}$/;
 
 // 쓰던 글 (대상별). 로그인이 만료돼 패널이 닫혔다가 다시 열려도 남아 있게 부품 밖에 보관
 const drafts = new Map();
@@ -13,6 +15,7 @@ const drafts = new Map();
 export default function ReviewSection({ targetType, targetId, name, address, onAuthExpired }) {
   const { user, logout } = useAuth();
   const key = `${targetType}:${targetId}`;
+  const supported = targetType !== "place" || PLACE_ID_RE.test(targetId);
   const [list, setList] = useState({ status: "loading", items: [], message: "" });
   const [rating, setRating] = useState(() => drafts.get(key)?.rating ?? 0);
   const [content, setContent] = useState(() => drafts.get(key)?.content ?? "");
@@ -23,13 +26,14 @@ export default function ReviewSection({ targetType, targetId, name, address, onA
   const [deleteErrors, setDeleteErrors] = useState({}); // 후기 번호 -> 삭제 실패 문장
 
   const load = useCallback(() => {
+    if (!supported) return; // 후기를 받지 않는 장소는 서버를 부르지 않음
     let cancelled = false;
     setList((l) => ({ ...l, status: "loading", message: "" }));
     listReviews(targetType, targetId)
       .then((items) => !cancelled && setList({ status: "ok", items, message: "" }))
       .catch((err) => !cancelled && setList({ status: "error", items: [], message: err.message }));
     return () => (cancelled = true);
-  }, [targetType, targetId]);
+  }, [targetType, targetId, supported]);
 
   useEffect(() => load(), [load]);
 
@@ -83,6 +87,15 @@ export default function ReviewSection({ targetType, targetId, name, address, onA
   };
 
   const length = content.trim().length;
+
+  if (!supported) {
+    return (
+      <section aria-label={`${name} 후기`} className="mt-5 flex flex-col gap-5">
+        <h3 className="text-base font-bold">후기</h3>
+        <p className="muted">이 장소는 아직 후기를 쓸 수 없어요.</p>
+      </section>
+    );
+  }
 
   return (
     <section aria-label={`${name} 후기`} className="mt-5 flex flex-col gap-5">

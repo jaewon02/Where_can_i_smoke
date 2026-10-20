@@ -34,8 +34,8 @@ export default function ZonePanel({ zone, onClose, onAuthExpired }) {
           {zone.radius_m && <p className="note">금연 반경 약 {zone.radius_m}m</p>}
         </header>
         <ReviewSection
-          key={`${zone.kind ?? "zone"}:${zone.id}`}
-          targetType={zone.kind === "place" ? "place" : "zone"}
+          key={`${zone.type === "place" ? "place" : "zone"}:${zone.id}`}
+          targetType={zone.type === "place" ? "place" : "zone"}
           targetId={String(zone.id)}
           name={zone.name}
           address={zone.address}
