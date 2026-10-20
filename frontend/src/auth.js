@@ -2,6 +2,8 @@ import { useEffect, useSyncExternalStore } from "react";
 
 // 브라우저에는 로그인 표(token)만 저장. 로그인했는지·누구인지는 항상 서버(/me, 로그인 응답)가 정함
 const TOKEN_KEY = "auth_token";
+// 다른 API(후기 등)가 인증 헤더에 쓸 표. 저장 방식은 이 파일 밖에서 모르게 함
+export const getToken = () => localStorage.getItem(TOKEN_KEY);
 
 const SERVER_DOWN = "서버에 연결하지 못했습니다. 백엔드 서버(포트 8001)가 켜져 있는지 확인해 주세요.";
 

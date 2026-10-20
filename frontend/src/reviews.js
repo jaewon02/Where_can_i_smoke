@@ -1,4 +1,4 @@
-import { TOKEN_KEY } from "./auth.js";
+import { getToken } from "./auth.js";
 
 // 후기 서버 호출 (/api/reviews). 실패하면 { status, message } 를 담은 Error를 던짐 (status 0 = 서버에 닿지 못함)
 
@@ -15,7 +15,7 @@ async function request(path, { method = "GET", body, auth = false } = {}) {
   const headers = {};
   if (body) headers["Content-Type"] = "application/json";
   if (auth) {
-    const token = localStorage.getItem(TOKEN_KEY);
+    const token = getToken();
     if (token) headers.Authorization = `Bearer ${token}`;
   }
 
