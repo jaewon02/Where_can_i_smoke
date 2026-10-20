@@ -638,8 +638,8 @@ export default function App() {
   useEffect(() => {
     if (!kakao) return;
     const map = new kakao.maps.Map(document.getElementById("map"), {
-      center: new kakao.maps.LatLng(37.4990, 127.0560), // 강남구 한가운데
-      level: 6,
+      center: new kakao.maps.LatLng(37.49799161931449, 127.02770445495885), // 강남역
+      level: 3,
     });
     mapRef.current = map;
     infoRef.current = new kakao.maps.InfoWindow({ removable: true });
