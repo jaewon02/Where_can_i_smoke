@@ -50,3 +50,6 @@ pnpm-debug.log*
 *.swp
 .DS_Store
 Thumbs.db
+
+# Custom
+.worktreeinclude
