@@ -10,6 +10,7 @@ import SmokeModeSlider from "./SmokeModeSlider.jsx";
 import { zoneKind, zoneMarkerImage } from "./zoneIcons.js";
 import { buildAreas } from "./areas.js";
 import LoginButton from "./LoginButton.jsx";
+import usePanelOffset from "./usePanelOffset.js";
 import LoginDialog from "./LoginDialog.jsx";
 import ZonePanel from "./ZonePanel.jsx";
 import { requireLogin, useAuth } from "./auth.js";
@@ -96,6 +97,7 @@ export default function App() {
   const [selectedId, setSelectedId] = useState(null); // 정보 카드를 띄운 흡연구역 (사이드바 목록 선택 표시)
   const { user } = useAuth();
   const [reviewZone, setReviewZone] = useState(null); // 오른쪽 후기 패널에 보여줄 흡연구역 또는 일반 장소 (카드에 있던 정보)
+  const [myPosRef, myPosStyle] = usePanelOffset(Boolean(reviewZone && user)); // 후기 패널이 열리면 [내 위치로]도 패널 옆으로 (좁은 화면은 그대로)
   const [showSmoking, setShowSmoking] = useState(true); // 흡연모드 (지도 왼쪽 위 버튼, 처음엔 켜짐). 켜면 흡연구역 핀이 보이고, 길찾기에서 흡연구역을 들르고, 금연 안내와 오늘의 담배가 나타남 (꺼져 있으면 안 보임)
   const [showNon, setShowNon] = useState(true); // 비흡연구역 + 주변 금연시설
   const [zoomLevel, setZoomLevel] = useState(6); // 지금 지도 확대 레벨 (금연구역을 보여줄지 안내하는 데 사용)
@@ -789,9 +791,9 @@ export default function App() {
           onAuthExpired={() => requireLogin().then((u) => u || setReviewZone(null))}
         />
       )}
-      <LoginButton className="absolute top-3.5 right-3.5 z-10" />
+      <LoginButton className="absolute top-3.5 right-3.5 z-10" panelOpen={Boolean(reviewZone && user)} />
       {/* 로그인 버튼 아래: 지도를 내 위치로 이동 */}
-      <button type="button" className="my-pos-btn" onClick={goToMyPos} title="내 위치로 이동" aria-label="내 위치로 이동">
+      <button type="button" className="my-pos-btn" ref={myPosRef} style={myPosStyle} onClick={goToMyPos} title="내 위치로 이동" aria-label="내 위치로 이동">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
           <circle cx="12" cy="12" r="6.5" />
           <circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none" />
