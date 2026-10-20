@@ -55,6 +55,7 @@ body { margin: 0; font-family: system-ui, "Noto Sans KR", sans-serif; }
 .badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; color: #fff; }
 .badge.smoking { background: var(--smoking); }
 .badge.nonsmoking { background: var(--nonsmoking); }
+.badge.place { background: #3396ff; } /* 일반 장소 (은행, 가게 등) */
 
 .btn { padding: 9px 14px; border-radius: 8px; border: 1px solid #ccc; background: #fff; font: inherit; font-size: 14px; cursor: pointer; }
 .btn.primary { width: 100%; margin-top: 8px; background: #222; color: #fff; border-color: #222; }
