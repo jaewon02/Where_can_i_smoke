@@ -1,29 +1,14 @@
-import { useEffect, useRef, useState } from "react";
-import RouteButtons from "./RouteButtons.jsx";
+import { useEffect, useRef } from "react";
 
 const TYPE_LABEL = { smoking: "흡연구역", nonsmoking: "비흡연구역" };
 
-export default function ZonePanel({ zoneId, onClose, onRoutePick }) {
-  const [data, setData] = useState(null);
-  const [error, setError] = useState(null);
+// 오른쪽 흡연구역 패널 (후기 보기). 지도에서 이미 불러온 구역 정보(zone)만 보여주고 서버·DB는 따로 부르지 않음
+export default function ZonePanel({ zone, onClose }) {
   const closeRef = useRef(null);
 
-  const load = async () => {
-    try {
-      const res = await fetch(`/api/zones/${zoneId}`);
-      if (!res.ok) throw new Error("정보를 불러오지 못했습니다");
-      setData(await res.json());
-      setError(null);
-    } catch (e) {
-      setError(e.message);
-    }
-  };
-
   useEffect(() => {
-    setData(null);
-    load();
     closeRef.current?.focus();
-  }, [zoneId]);
+  }, [zone.id]);
 
   useEffect(() => {
     const onKey = (e) => {
@@ -33,29 +18,26 @@ export default function ZonePanel({ zoneId, onClose, onRoutePick }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const zone = data?.zone;
-
   return (
-    <aside className="panel" role="dialog" aria-label={zone?.name ?? "구역 상세"}>
+    <aside className="panel" role="dialog" aria-label={zone.name}>
       <button ref={closeRef} className="panel-close" onClick={onClose} aria-label="닫기">
         ✕
       </button>
 
-      {error && <p className="panel-msg error-text">{error}</p>}
-      {!data && !error && <p className="panel-msg">불러오는 중…</p>}
-
-      {zone && (
-        <div className="panel-body">
-          <header className="panel-head">
-            <span className={`badge ${zone.type}`}>{TYPE_LABEL[zone.type]}</span>
-            <h2>{zone.name}</h2>
-            <p className="addr">{zone.address}</p>
-            {zone.note && <p className="note">{zone.note}</p>}
-            {zone.radius_m && <p className="note">금연 반경 약 {zone.radius_m}m</p>}
-            <RouteButtons place={zone} onPick={onRoutePick} className="panel-od" />
-          </header>
-        </div>
-      )}
+      <div className="panel-body">
+        <header className="panel-head">
+          <span className={`badge ${zone.type}`}>{TYPE_LABEL[zone.type]}</span>
+          <h2>{zone.name}</h2>
+          {zone.address && zone.address !== zone.name && <p className="addr">{zone.address}</p>}
+          {zone.note && <p className="note">{zone.note}</p>}
+          {zone.radius_m && <p className="note">금연 반경 약 {zone.radius_m}m</p>}
+        </header>
+        {/* 후기는 아직 저장하는 곳(DB)이 없어서 '후기 없음'만 보여줌 */}
+        <section aria-label="후기">
+          <h3>후기</h3>
+          <p className="muted">아직 등록된 후기가 없어요.</p>
+        </section>
+      </div>
     </aside>
   );
 }
