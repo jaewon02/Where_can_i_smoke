@@ -13,7 +13,7 @@ import LoginButton from "./LoginButton.jsx";
 import usePanelOffset from "./usePanelOffset.js";
 import LoginDialog from "./LoginDialog.jsx";
 import ZonePanel from "./ZonePanel.jsx";
-import { isLoggedIn, useAuth } from "./auth.js";
+import { requireLogin, useAuth } from "./auth.js";
 import { findPlacesAt, LABEL_PRIORITY } from "./nearbyPlaces.js";
 
 // 흡연자 기준 색: 피워도 되는 곳(흡연구역)은 초록, 피우면 안 되는 곳(금연구역)은 빨강. styles.css 의 --smoking / --nonsmoking 과 같은 값
@@ -95,12 +95,10 @@ export default function App() {
   const [routeStart, setRouteStart] = useState(ME); // 길찾기 출발지 (기본: 내 위치)
   const [routeEnd, setRouteEnd] = useState(null); // 길찾기 도착지
   const [selectedId, setSelectedId] = useState(null); // 정보 카드를 띄운 흡연구역 (사이드바 목록 선택 표시)
-  const { user, remember } = useAuth();
-  const [loginOpen, setLoginOpen] = useState(false); // 후기 보기를 눌렀는데 로그인 전이면 띄우는 로그인 창
-  const pendingReviewRef = useRef(null); // 로그인 뒤 후기 패널을 열 흡연구역·장소
+  const { user } = useAuth();
   const [reviewZone, setReviewZone] = useState(null); // 오른쪽 후기 패널에 보여줄 흡연구역 또는 일반 장소 (카드에 있던 정보)
   const [myPosRef, myPosStyle] = usePanelOffset(Boolean(reviewZone && user)); // 후기 패널이 열리면 [내 위치로]도 패널 옆으로 (좁은 화면은 그대로)
-  const [showSmoking, setShowSmoking] = useState(false); // 흡연모드 (지도 왼쪽 위 버튼). 켜면 흡연구역 핀이 보이고, 길찾기에서 흡연구역을 들르고, 금연 안내와 오늘의 담배가 나타남 (꺼져 있으면 안 보임)
+  const [showSmoking, setShowSmoking] = useState(true); // 흡연모드 (지도 왼쪽 위 버튼, 처음엔 켜짐). 켜면 흡연구역 핀이 보이고, 길찾기에서 흡연구역을 들르고, 금연 안내와 오늘의 담배가 나타남 (꺼져 있으면 안 보임)
   const [showNon, setShowNon] = useState(true); // 비흡연구역 + 주변 금연시설
   const [zoomLevel, setZoomLevel] = useState(6); // 지금 지도 확대 레벨 (금연구역을 보여줄지 안내하는 데 사용)
   const flagsRef = useRef({});
@@ -560,7 +558,7 @@ export default function App() {
       });
     }
     q(".cc-note").textContent = place.note ?? "";
-    // 후기 보기 (흡연구역·일반 장소 카드 모두): 로그인했으면 오른쪽 패널에 후기, 아니면 로그인 창을 띄움
+    // 후기 보기 (흡연구역·일반 장소 카드 모두): 서버에 로그인을 확인하고, 로그인 전이면 로그인 창을 띄워 로그인하면 이어서 오른쪽 패널을 엶
     // 일반 장소는 카드에 있는 정보로 패널 내용을 만듦 (서버·DB는 부르지 않음)
     const reviewTarget = place.zone ?? {
       id: place.id,
@@ -570,11 +568,7 @@ export default function App() {
       address: road || place.jibunAddress,
       note: place.phone ? `☎ ${place.phone}` : "",
     };
-    q(".cc-reviews").onclick = () => {
-      if (isLoggedIn()) return setReviewZone(reviewTarget);
-      pendingReviewRef.current = reviewTarget; // 로그인하면 이어서 후기 패널을 엶
-      setLoginOpen(true);
-    };
+    q(".cc-reviews").onclick = () => requireLogin().then((user) => user && setReviewZone(reviewTarget));
     if (place.onPin) el.classList.add("cc-on-pin"); // 핀 마커 위에 띄울 때는 핀을 가리지 않게 더 위로
     const phone = q(".cc-phone");
     phone.textContent = place.phone;
@@ -595,14 +589,6 @@ export default function App() {
       clickable: true,
     });
     keepCardInView(el);
-  };
-
-  // 로그인 창에서 로그인/회원가입에 성공하면: 로그인 상태 기억 + 후기 보기를 누르다 온 경우 이어서 후기 패널
-  const onLoginSuccess = (result) => {
-    remember(result);
-    setLoginOpen(false);
-    if (pendingReviewRef.current) setReviewZone(pendingReviewRef.current);
-    pendingReviewRef.current = null;
   };
 
   // 카드가 화면 가장자리나 왼쪽 사이드바, 위쪽 버튼들에 가려지면 카드가 다 보이도록 지도를 옮김
@@ -690,10 +676,10 @@ export default function App() {
 
   // 후기 패널이 열리면 떠 있는 카드가 패널에 가려지지 않게 (패널이 미끄러져 들어온 뒤에 잼)
   useEffect(() => {
-    if (!reviewZone || !user) return;
+    if (!reviewZone) return;
     const t = setTimeout(() => clickCardRef.current && keepCardInView(clickCardRef.current.getContent()), 300);
     return () => clearTimeout(t);
-  }, [reviewZone, user]);
+  }, [reviewZone]);
 
   useEffect(() => {
     if (!mapRef.current) return;
@@ -795,15 +781,14 @@ export default function App() {
           </div>
         </>
       )}
+
       {/* 후기 패널은 로그인한 동안에만 (로그아웃하면 닫힘) */}
       {reviewZone && user && (
         <ZonePanel
           zone={reviewZone}
           onClose={() => setReviewZone(null)}
-          onAuthExpired={() => {
-            pendingReviewRef.current = reviewZone; // 다시 로그인하면 이 패널을 이어서 엶
-            setLoginOpen(true);
-          }}
+          // 다시 로그인하면 이 패널을 이어서 보고, 로그인하지 않고 닫으면 패널도 닫음
+          onAuthExpired={() => requireLogin().then((u) => u || setReviewZone(null))}
         />
       )}
       <LoginButton className="absolute top-3.5 right-3.5 z-10" panelOpen={Boolean(reviewZone && user)} />
@@ -815,14 +800,7 @@ export default function App() {
           <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
         </svg>
       </button>
-      <LoginDialog
-        open={loginOpen}
-        onOpenChange={(open) => {
-          setLoginOpen(open);
-          if (!open) pendingReviewRef.current = null; // 로그인하지 않고 닫으면 후기 화면으로 넘어가지 않음
-        }}
-        onSuccess={onLoginSuccess}
-      /> {/* 임시: 위치는 팀과 정함 */}
+      <LoginDialog /> {/* 임시: 위치는 팀과 정함 */}
       <SmokeModeSlider on={showSmoking} onChange={setShowSmoking} />
       {/* 내 위치 마커 끌기 켜기/끄기: 지도 왼쪽 아래 구석의 작은 슬라이더 */}
       <button
