@@ -6,6 +6,8 @@ import ZoneList from "./ZoneList.jsx";
 import RoutePanel, { ME } from "./RoutePanel.jsx";
 import Roulette from "./Roulette.jsx";
 import QuitAd from "./QuitAd.jsx";
+import SmokeModeSlider from "./SmokeModeSlider.jsx";
+import { zoneKind, zoneMarkerImage } from "./zoneIcons.js";
 import { buildAreas } from "./areas.js";
 import LoginButton from "./LoginButton.jsx";
 import LoginDialog from "./LoginDialog.jsx";
@@ -18,6 +20,8 @@ const COLORS = { smoking: "#1f9d55", nonsmoking: "#e5484d" };
 // 카카오 지도 레벨은 숫자가 작을수록 많이 확대한 것. 화면이 복잡해지지 않게 확대했을 때만 금연구역을 보여줌
 const AREA_MAX_LEVEL = 3; // 이 레벨 이하로 확대했을 때만 금연구역 범위 표시
 const BADGE_MAX_LEVEL = 2; // 이 레벨 이하로 확대했을 때만 금연구역 배지 표시
+// 금연구역은 사용자 눈에는 보이지 않게 하고, 위치(GPS) 판단 등 내부에서만 쓸 예정. 개발 중 확인할 때만 true로
+const SHOW_NONSMOKING_AREAS = false;
 
 // 시설 범위의 큰 쪽 길이(m): 경계선 다각형이면 그 바깥 사각형, 아니면 반경 원의 지름
 function extentM(f) {
@@ -67,21 +71,8 @@ function badgeImage(kakao) {
   return new kakao.maps.MarkerImage(svgUri(svg), new kakao.maps.Size(20, 20), { offset: new kakao.maps.Point(10, 10) });
 }
 
-// 담배 아이콘 (slash=true면 금연 표시: 담배에 X)
-function CigaretteIcon({ slash = false }) {
-  return (
-    <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="2" y="15" width="12" height="4" rx="1" />
-      <rect x="14" y="15" width="5" height="4" rx="1" fill="currentColor" stroke="none" opacity=".45" />
-      <path d="M21 15v4M18.5 11c0-1.8 2-1.8 2-3.6M14.5 11c0-1.8 2-1.8 2-3.6" />
-      {slash && <path d="M3.5 3.5l17 17" strokeWidth="2.4" />}
-    </svg>
-  );
-}
-
 export default function App() {
   const { kakao, error } = useKakao();
-  const [menuOpen, setMenuOpen] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true); // 왼쪽 검색 사이드바
   const [visibleSmoking, setVisibleSmoking] = useState([]); // 사이드바 목록: 화면 안 흡연구역
   const [listOrigin, setListOrigin] = useState(null); // 목록 거리 기준: 검색으로 고른 장소 (없으면 거리 표시 안 함)
@@ -91,14 +82,12 @@ export default function App() {
   const [rouletteOpen, setRouletteOpen] = useState(false); // 오늘의 담배 룰렛
   const [routeStart, setRouteStart] = useState(ME); // 길찾기 출발지 (기본: 내 위치)
   const [routeEnd, setRouteEnd] = useState(null); // 길찾기 도착지
-  const [smokingMode, setSmokingMode] = useState(false); // 길찾기 흡연모드 (켜면 금연 안내가 더 많이 뜸)
-  const [adClosed, setAdClosed] = useState(false); // 지도 위 금연 안내 카드 닫음 (흡연모드에선 못 닫음)
   const [selectedId, setSelectedId] = useState(null); // 정보 카드를 띄운 흡연구역 (사이드바 목록 선택 표시)
   const { user, remember } = useAuth();
   const [loginOpen, setLoginOpen] = useState(false); // 후기 보기를 눌렀는데 로그인 전이면 띄우는 로그인 창
   const pendingReviewRef = useRef(null); // 로그인 뒤 후기 패널을 열 구역
   const [reviewZone, setReviewZone] = useState(null); // 오른쪽 후기 패널에 보여줄 흡연구역 (지도에서 불러온 구역 정보)
-  const [showSmoking, setShowSmoking] = useState(true);
+  const [showSmoking, setShowSmoking] = useState(false); // 흡연모드 (지도 왼쪽 위 버튼). 켜면 흡연구역 핀이 보이고, 길찾기에서 흡연구역을 들르고, 금연 안내와 오늘의 담배가 나타남 (꺼져 있으면 안 보임)
   const [showNon, setShowNon] = useState(true); // 비흡연구역 + 주변 금연시설
   const [zoomLevel, setZoomLevel] = useState(6); // 지금 지도 확대 레벨 (금연구역을 보여줄지 안내하는 데 사용)
   const flagsRef = useRef({});
@@ -171,7 +160,7 @@ export default function App() {
   // 모든 금연 범위를 하나의 구역으로 합쳐 그림: 겹치는 부분의 선은 없애고, 구역마다 배지는 하나만 둠
   const drawAreas = () => {
     const map = mapRef.current;
-    const showAreas = map.getLevel() <= AREA_MAX_LEVEL; // 넓게 볼 때는 금연구역을 그리지 않음
+    const showAreas = SHOW_NONSMOKING_AREAS && map.getLevel() <= AREA_MAX_LEVEL; // 넓게 볼 때는 금연구역을 그리지 않음
     const areas = showAreas ? [...zoneAreasRef.current, ...facilityAreasRef.current] : [];
     // 지도를 움직여도 범위가 그대로면 다시 그리지 않음 (열려 있는 말풍선이 닫히지 않도록)
     // 배지는 많이 확대했을 때(레벨 2 이하)만 표시. 그보다 넓게 볼 때는 범위만 보여줌 (배지가 너무 빽빽해서)
@@ -220,7 +209,7 @@ export default function App() {
     const map = mapRef.current;
     const reqId = ++facilityReqRef.current;
     // 꺼져 있거나 너무 넓게 보고 있으면 조회하지 않고 지움 (넓게 볼 때는 어차피 그리지 않으니 서버 호출도 아낌)
-    if (!map || !flagsRef.current.showNon || map.getLevel() > AREA_MAX_LEVEL) {
+    if (!SHOW_NONSMOKING_AREAS || !map || !flagsRef.current.showNon || map.getLevel() > AREA_MAX_LEVEL) {
       facilityAreasRef.current = [];
       return drawAreas();
     }
@@ -283,7 +272,7 @@ export default function App() {
       const marker = new kakao.maps.Marker({
         map,
         position: new kakao.maps.LatLng(z.lat, z.lng),
-        image: pinImage(kakao, z.type),
+        image: z.type === "smoking" ? zoneMarkerImage(kakao, zoneKind(z.note)) : pinImage(kakao, z.type), // 흡연구역은 종류별 아이콘
         title: z.name,
       });
       kakao.maps.event.addListener(marker, "click", () => {
@@ -638,8 +627,8 @@ export default function App() {
   useEffect(() => {
     if (!kakao) return;
     const map = new kakao.maps.Map(document.getElementById("map"), {
-      center: new kakao.maps.LatLng(37.4990, 127.0560), // 강남구 한가운데
-      level: 6,
+      center: new kakao.maps.LatLng(37.49799161931449, 127.02770445495885), // 강남역
+      level: 3,
     });
     mapRef.current = map;
     infoRef.current = new kakao.maps.InfoWindow({ removable: true });
@@ -686,11 +675,7 @@ export default function App() {
             end={routeEnd}
             setStart={setRouteStart}
             setEnd={setRouteEnd}
-            smoking={smokingMode}
-            onSmokingChange={(on) => {
-              setSmokingMode(on);
-              if (on) setAdClosed(false);
-            }}
+            smoking={showSmoking}
             onLocate={locate}
             onShowRoute={showRoute}
             onClearRoute={clearRoute}
@@ -713,9 +698,11 @@ export default function App() {
               <span aria-hidden="true">🚶</span> 길찾기
               <span className="route-entry-arrow" aria-hidden="true">›</span>
             </button>
-            <button className="roulette-entry" onClick={() => setRouletteOpen(true)}>
-              <span aria-hidden="true">🎯</span> 오늘의 담배
-            </button>
+            {showSmoking && (
+              <button className="roulette-entry" onClick={() => setRouletteOpen(true)}>
+                <span aria-hidden="true">🎯</span> 오늘의 담배
+              </button>
+            )}
           </div>
           <SearchBox
             kakao={kakao}
@@ -733,9 +720,11 @@ export default function App() {
               onRoutePick={pickRoutePoint}
             />
           </SearchBox>
-          <div className="sidebar-ad">
-            <QuitAd slot={0} />
-          </div>
+          {showSmoking && (
+            <div className="sidebar-ad">
+              <QuitAd slot={0} />
+            </div>
+          )}
         </div>
         <button
           className="sidebar-tab"
@@ -747,17 +736,15 @@ export default function App() {
           {sidebarOpen ? "◀" : "▶"}
         </button>
       </aside>
-      {showNon && zoomLevel > AREA_MAX_LEVEL && <div className="hint">금연구역은 지도를 더 확대하면 보여요</div>}
+      {SHOW_NONSMOKING_AREAS && showNon && zoomLevel > AREA_MAX_LEVEL && <div className="hint">금연구역은 지도를 더 확대하면 보여요</div>}
       <div className="credit">경계선: © OpenStreetMap contributors</div>
-      {rouletteOpen && <Roulette onClose={() => setRouletteOpen(false)} />}
-      {/* 지도 위 금연 안내: 평소엔 오른쪽 아래 1개(닫기 가능), 흡연모드면 위쪽 띠 + 왼쪽 아래까지 더 띄움 */}
-      {(!adClosed || smokingMode) && (
-        <div className="map-ad right">
-          <QuitAd slot={5} variant="float" onClose={smokingMode ? undefined : () => setAdClosed(true)} />
-        </div>
-      )}
-      {smokingMode && (
+      {rouletteOpen && showSmoking && <Roulette onClose={() => setRouletteOpen(false)} />}
+      {/* 지도 위 금연 안내: 흡연모드를 켰을 때만 오른쪽 아래, 위쪽 띠, 왼쪽 아래에 띄움 */}
+      {showSmoking && (
         <>
+          <div className="map-ad right">
+            <QuitAd slot={5} variant="float" />
+          </div>
           <div className="map-ad top">
             <QuitAd slot={3} variant="strip" />
           </div>
@@ -779,32 +766,7 @@ export default function App() {
         }}
         onSuccess={onLoginSuccess}
       /> {/* 임시: 위치는 팀과 정함 */}
-      <div className={`fab-group ${menuOpen ? "open" : ""}`}>
-        <button
-          className="fab main"
-          title={menuOpen ? "접기" : "흡연/비흡연구역 보기"}
-          aria-expanded={menuOpen}
-          onClick={() => setMenuOpen((v) => !v)}
-        >
-          <CigaretteIcon />
-        </button>
-        <button
-          className={`fab sub smoking ${showSmoking ? "on" : ""}`}
-          title={`흡연구역 ${showSmoking ? "숨기기" : "보기"}`}
-          aria-pressed={showSmoking}
-          onClick={() => setShowSmoking((v) => !v)}
-        >
-          <CigaretteIcon />
-        </button>
-        <button
-          className={`fab sub nonsmoking ${showNon ? "on" : ""}`}
-          title={`비흡연구역·금연시설 ${showNon ? "숨기기" : "보기"}`}
-          aria-pressed={showNon}
-          onClick={() => setShowNon((v) => !v)}
-        >
-          <CigaretteIcon slash />
-        </button>
-      </div>
+      <SmokeModeSlider on={showSmoking} onChange={setShowSmoking} />
     </div>
   );
 }
