@@ -9,6 +9,7 @@ import Roulette from "./Roulette.jsx";
 import QuitAd from "./QuitAd.jsx";
 import { buildAreas } from "./areas.js";
 import LoginButton from "./LoginButton.jsx";
+import { findPlacesAt, LABEL_PRIORITY } from "./nearbyPlaces.js";
 
 // 흡연자 기준 색: 피워도 되는 곳(흡연구역)은 초록, 피우면 안 되는 곳(금연구역)은 빨강. styles.css 의 --smoking / --nonsmoking 과 같은 값
 const COLORS = { smoking: "#1f9d55", nonsmoking: "#e5484d" };
@@ -110,7 +111,7 @@ export default function App() {
   const searchedPlaceRef = useRef(null); // 검색으로 고른 장소 (목록 거리 기준)
   const routeOverlaysRef = useRef([]); // 길찾기 경로 선
   const myLocRef = useRef(null); // 내 위치 파란 점
-  const clickCardRef = useRef(null); // 지도를 눌렀을 때 뜨는 [출발 | 도착] 카드
+  const clickCardRef = useRef(null); // 지도의 장소를 눌렀을 때 뜨는 장소 정보 카드
   const clickReqRef = useRef(0);
 
   // 구역 배지를 눌렀을 때 보여줄 말풍선: 구역에 속한 시설 목록과 적용 기준
@@ -423,49 +424,131 @@ export default function App() {
     clickCardRef.current = null;
   };
 
-  // 지도의 아무 곳이나 누르면: 그 위치의 건물명/주소를 찾아 [출발 | 도착] 카드를 띄움
+  // 지도의 장소(주민센터, 은행, 아파트, 상가, 일반 가게, 버스정류장 등)를 누르면 그 장소의 정보 카드를 띄움
+  // 카카오 지도는 바탕 지도의 장소 이름을 눌렀다는 이벤트를 주지 않으므로, 누른 자리 바로 위에 장소가 있을 때만 장소를 누른 것으로 봄
+  // 길거리처럼 장소가 없는 곳을 누르면 아무것도 하지 않음 (열려 있던 카드만 닫힘)
   const openClickCard = (latLng) => {
     const map = mapRef.current;
     closeClickCard();
     infoRef.current.close();
+    if (map.getLevel() > 4) return; // 장소 이름은 많이 확대했을 때만 지도에 보임
     const reqId = clickReqRef.current;
-    const lat = latLng.getLat();
-    const lng = latLng.getLng();
 
+    // 지도의 장소 이름표는 장소 좌표를 가운데에 두고 가로로 길게 그려지므로(아이콘 + 이름),
+    // 누른 지점과의 거리를 화면 픽셀로 재되 가로로 떨어진 건 덜 치고, 이름표 높이를 벗어난 곳은 뺌
+    const b = map.getBounds();
+    const widthM = (b.getNorthEast().getLng() - b.getSouthWest().getLng()) * 111320 * Math.cos((latLng.getLat() * Math.PI) / 180);
+    const mpp = widthM / (document.getElementById("map").clientWidth || 800); // 1픽셀이 몇 m인지
+    const proj = map.getProjection();
+    const at = proj.containerPointFromCoords(latLng);
+    const priority = (p) => {
+      const i = LABEL_PRIORITY.indexOf(p.groupCode);
+      return i < 0 ? LABEL_PRIORITY.length : i;
+    };
+    const rank = (places) =>
+      places
+        .map((p) => {
+          const pt = proj.containerPointFromCoords(new kakao.maps.LatLng(p.lat, p.lng));
+          const dx = Math.abs(pt.x - at.x);
+          const dy = Math.abs(pt.y - at.y);
+          return { p, dx, dy, score: Math.hypot(dx * 0.4, dy) };
+        })
+        .filter((r) => r.dx <= 50 && r.dy <= 10)
+        // 거의 같은 자리(3픽셀 이내)면 지도에 이름이 주로 표시되는 종류를 먼저
+        .sort((x, y) => Math.round(x.score / 3) - Math.round(y.score / 3) || priority(x.p) - priority(y.p) || x.score - y.score)
+        .map((r) => r.p);
+
+    findPlacesAt(kakao, latLng.getLat(), latLng.getLng(), Math.min(150, Math.max(20, mpp * 50)))
+      .then(({ places, building }) => {
+        if (reqId !== clickReqRef.current) return; // 그새 다른 곳을 눌렀으면 무시
+        const place = rank(places)[0];
+        if (!place) return; // 길거리, 단지 안 길, 공터 등 장소 이름이 없는 곳
+        if (place.groupCode !== "BUS") return showPlaceCard(place, building);
+        // 버스정류장은 주소가 없어서 정류장 위치의 주소를 찾아 넣음
+        new kakao.maps.services.Geocoder().coord2Address(place.lng, place.lat, (res, status) => {
+          if (reqId !== clickReqRef.current) return;
+          const a = status === kakao.maps.services.Status.OK ? res[0] : null;
+          place.roadAddress = a?.road_address?.address_name || "";
+          place.jibunAddress = a?.address?.address_name || "";
+          showPlaceCard(place, null);
+        });
+      });
+  };
+
+  // 장소 정보 카드 (카카오맵 장소 카드 모양): 이름·종류, 주소, (우)우편번호 (지번), 전화
+  // 아래 버튼: [주소 복사] [출발] [도착] (출발/도착은 이 장소를 길찾기 출발지/도착지로)
+  const showPlaceCard = (place, building) => {
     const el = document.createElement("div");
     el.className = "click-card";
     el.innerHTML = `
       <button class="cc-close" aria-label="닫기">✕</button>
-      <b class="cc-title">주소 확인 중…</b>
-      <small class="cc-addr"></small>
-      <span class="od-btns cc-od" role="group" aria-label="이 위치 길찾기">
-        <button type="button" class="od-start">출발</button>
-        <button type="button" class="od-end">도착</button>
-      </span>
-      <span class="cc-pin" aria-hidden="true"></span>`;
-    const place = { id: `pt-${lat.toFixed(5)},${lng.toFixed(5)}`, name: "지도에서 고른 위치", lat, lng };
+      <div class="cc-head"><b class="cc-title"></b><span class="cc-cat"></span></div>
+      <p class="cc-addr"></p>
+      <p class="cc-sub"><span class="cc-zip"></span><span class="cc-jibun"></span></p>
+      <a class="cc-phone"></a>
+      <div class="cc-actions">
+        <button type="button" class="cc-copy" title="주소 복사" aria-label="주소 복사">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg>
+        </button>
+        <button type="button" class="cc-start">출발</button>
+        <button type="button" class="cc-end">도착</button>
+      </div>`;
+    const q = (s) => el.querySelector(s);
     // 카드 안을 누를 때 지도 클릭으로 다시 처리되지 않도록 막음
     ["mousedown", "touchstart", "click", "dblclick"].forEach((t) => el.addEventListener(t, (e) => e.stopPropagation()));
-    el.querySelector(".cc-close").onclick = closeClickCard;
-    el.querySelector(".od-start").onclick = () => {
+    q(".cc-close").onclick = closeClickCard;
+    q(".cc-start").onclick = () => {
       pickRoutePoint("start", place);
       closeClickCard();
     };
-    el.querySelector(".od-end").onclick = () => {
+    q(".cc-end").onclick = () => {
       pickRoutePoint("end", place);
       closeClickCard();
     };
-    clickCardRef.current = new kakao.maps.CustomOverlay({ map, position: latLng, content: el, yAnchor: 1, zIndex: 6, clickable: true });
 
-    new kakao.maps.services.Geocoder().coord2Address(lng, lat, (res, status) => {
-      if (reqId !== clickReqRef.current) return; // 그새 다른 곳을 눌렀으면 무시
-      const a = status === kakao.maps.services.Status.OK ? res[0] : null;
-      const road = a?.road_address;
-      const addr = road?.address_name || a?.address?.address_name || "";
-      place.name = road?.building_name || addr || "지도에서 고른 위치";
-      place.address = addr;
-      el.querySelector(".cc-title").textContent = place.name;
-      el.querySelector(".cc-addr").textContent = road?.building_name ? addr : a?.address && road ? a.address.address_name : "";
+    q(".cc-title").textContent = place.name;
+    // 분류 경로의 마지막 단계 (이름과 같으면 그 앞 단계). 예: '음식점 > 한식 > 국밥' -> '국밥'
+    const path = place.categoryPath ? place.categoryPath.split(" > ") : [place.group];
+    let cat = path.pop() || "";
+    if (cat && place.name.startsWith(cat) && path.length) cat = path.pop();
+    q(".cc-cat").textContent = cat;
+    const road = place.roadAddress || place.address || "";
+    q(".cc-addr").textContent = road || place.jibunAddress;
+    // 지번은 도로명주소와 겹치는 앞부분(시·구)을 빼고 동·번지만
+    const roadParts = road.split(" ");
+    const jibunParts = (place.jibunAddress || "").split(" ");
+    // 시 이름은 '서울'과 '서울특별시'처럼 다르게 올 수 있어 앞 두 글자로 비교
+    const same = (a, b, i) => a === b || (i === 0 && a?.slice(0, 2) === b?.slice(0, 2));
+    for (let i = 0; jibunParts.length > 1 && same(jibunParts[0], roadParts[0], i); i++) {
+      jibunParts.shift();
+      roadParts.shift();
+    }
+    q(".cc-jibun").textContent = road && place.jibunAddress ? `(지번) ${jibunParts.join(" ")}` : "";
+    const setZip = (zip) => (q(".cc-zip").textContent = zip ? `(우) ${zip}` : "");
+    if (building && building.roadAddress === road) setZip(building.zipCode);
+    else if (road) {
+      // 우편번호는 장소 검색 결과에 없어서 주소로 한 번 더 찾음
+      new kakao.maps.services.Geocoder().addressSearch(road, (res, status) => {
+        if (status === kakao.maps.services.Status.OK) setZip(res[0]?.road_address?.zone_no);
+      });
+    }
+    const phone = q(".cc-phone");
+    phone.textContent = place.phone;
+    if (place.phone) phone.href = `tel:${place.phone}`;
+    const copy = q(".cc-copy");
+    copy.onclick = () =>
+      navigator.clipboard?.writeText(`${place.name} ${road || place.jibunAddress}`).then(() => {
+        copy.classList.add("done");
+        copy.title = "복사됨";
+      });
+
+    clickCardRef.current = new kakao.maps.CustomOverlay({
+      map: mapRef.current,
+      position: new kakao.maps.LatLng(place.lat, place.lng),
+      content: el,
+      yAnchor: 1,
+      zIndex: 6,
+      clickable: true,
     });
   };
 
