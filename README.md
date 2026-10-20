@@ -21,6 +21,26 @@ npm install
 npm run dev     # http://localhost:5173
 ```
 
+## 데이터베이스 (SQLite)
+
+### `zones.db`
+사용 파일: `backend/db.py`, `backend/main.py`, `backend/seed.py`, `backend/sync.py`, `backend/facilities_tool.py`
+
+| 표 | 컬럼 |
+|---|---|
+| `zones` | `id`, `name`, `type`, `lat`, `lng`, `address`, `note`, `radius_m` |
+| `reviews` | `id`, `zone_id`, `author`, `rating`, `content`, `created_at` |
+| `review_photos` | `id`, `review_id`, `filename` |
+| `facilities` | `id`, `kakao_id`, `type_key`, `name`, `lat`, `lng`, `area`, `r` |
+| `geocode_cache` | `address`, `lat`, `lng` |
+
+### `users.db`
+사용 파일: `backend/db.py`, `backend/main.py`
+
+| 표 | 컬럼 |
+|---|---|
+| `users` | `id`, `nickname`, `user_id`, `password_hash`, `created_at` |
+
 ## 초기 데이터 (`seed.py`)
 `uv run python seed.py` 한 번이면 저장소의 `backend/data/` 파일로 아래 데이터를 모두 넣습니다. 다시 실행해도 중복되지 않고, 카카오·공공데이터 키 없이 동작합니다.
 - 금연 규칙 대상 시설 (송파구·강남구, 경계선 기준 금연 구역 포함)
