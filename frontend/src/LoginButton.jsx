@@ -1,14 +1,12 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import LoginDialog from "./LoginDialog.jsx";
-import { useAuth } from "./auth.js";
+import { requireLogin, useAuth } from "./auth.js";
 
 const TOAST_MS = 2000; // 로그아웃 알림이 떠 있는 시간
 
 // 시험용 로그인 버튼. 로그인 전에는 [로그인]으로 창을 열고, 로그인 뒤에는 닉네임과 [로그아웃]을 보여 줌
 export default function LoginButton({ className }) {
-  const { user, remember, logout } = useAuth();
-  const [open, setOpen] = useState(false);
+  const { user, logout } = useAuth();
   const [toast, setToast] = useState(false); // [로그아웃]을 누르면 화면 한가운데에 잠깐 띄우는 '로그아웃되었습니다' 알림
 
   useEffect(() => {
@@ -22,26 +20,21 @@ export default function LoginButton({ className }) {
     setToast(true);
   };
 
+  let button = null; // 서버에 확인 중(user === undefined)이면 버튼 없음
+  if (user) {
+    button = (
+      <div className={`flex items-center gap-2 rounded-lg bg-background/95 py-1 pr-1 pl-3 text-sm shadow ${className ?? ""}`}>
+        <span className="font-medium">{user.nickname}님</span>
+        <Button variant="outline" size="sm" onClick={onLogout}>로그아웃</Button>
+      </div>
+    );
+  } else if (user === null) {
+    button = <Button className={`shadow ${className ?? ""}`} onClick={() => requireLogin()}>로그인</Button>;
+  }
+
   return (
     <>
-      {user ? (
-        <div className={`flex items-center gap-2 rounded-lg bg-background/95 py-1 pr-1 pl-3 text-sm shadow ${className ?? ""}`}>
-          <span className="font-medium">{user.nickname}님</span>
-          <Button variant="outline" size="sm" onClick={onLogout}>로그아웃</Button>
-        </div>
-      ) : (
-        <>
-          <Button className={`shadow ${className ?? ""}`} onClick={() => setOpen(true)}>로그인</Button>
-          <LoginDialog
-            open={open}
-            onOpenChange={setOpen}
-            onSuccess={(result) => {
-              remember(result);
-              setOpen(false);
-            }}
-          />
-        </>
-      )}
+      {button}
       {toast && (
         <div
           role="status"

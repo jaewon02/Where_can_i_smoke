@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { login, signup } from "./auth.js";
+import { cancelLogin, login, signup, useLoginOpen } from "./auth.js";
 
 const FIELDS = {
   login: [
@@ -19,8 +19,8 @@ const FIELDS = {
   ],
 };
 
-// 로그인/회원가입 입력 양식 하나. 성공하면 서버 응답({ token, nickname, ... })을 onSuccess로 넘김
-function AuthForm({ mode, pending, setPending, onSuccess }) {
+// 로그인/회원가입 입력 양식 하나. 성공하면 auth.js가 로그인 상태를 기억하고 창을 닫음
+function AuthForm({ mode, pending, setPending }) {
   const fields = FIELDS[mode];
   const [form, setForm] = useState(() => Object.fromEntries(fields.map((f) => [f.name, ""])));
   const [error, setError] = useState("");
@@ -32,8 +32,7 @@ function AuthForm({ mode, pending, setPending, onSuccess }) {
     setError("");
     setPending(true);
     try {
-      const result = await (mode === "login" ? login(form) : signup(form));
-      onSuccess(result);
+      await (mode === "login" ? login(form) : signup(form));
     } catch (err) {
       setError(err.message);
     } finally {
@@ -93,14 +92,15 @@ function AuthForm({ mode, pending, setPending, onSuccess }) {
   );
 }
 
-// 지도 위에 뜨는 로그인 창. [로그인] [회원가입] 탭
-export default function LoginDialog({ open, onOpenChange, onSuccess }) {
+// 지도 위에 뜨는 로그인 창 (앱에 하나만 둠, 여닫기는 auth.js의 requireLogin). [로그인] [회원가입] 탭
+export default function LoginDialog() {
+  const open = useLoginOpen();
   const [tab, setTab] = useState("login");
   const [pending, setPending] = useState(false);
 
   return (
     // 서버 응답을 기다리는 동안에는 닫히지 않게 함
-    <Dialog open={open} onOpenChange={(v) => !pending && onOpenChange(v)}>
+    <Dialog open={open} onOpenChange={(v) => !pending && !v && cancelLogin()}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>{tab === "login" ? "로그인" : "회원가입"}</DialogTitle>
@@ -113,10 +113,10 @@ export default function LoginDialog({ open, onOpenChange, onSuccess }) {
           </TabsList>
           {/* 창을 닫으면 내용이 사라지므로 다시 열 때 입력값과 오류가 비워짐 */}
           <TabsContent value="login">
-            <AuthForm mode="login" pending={pending} setPending={setPending} onSuccess={onSuccess} />
+            <AuthForm mode="login" pending={pending} setPending={setPending} />
           </TabsContent>
           <TabsContent value="signup">
-            <AuthForm mode="signup" pending={pending} setPending={setPending} onSuccess={onSuccess} />
+            <AuthForm mode="signup" pending={pending} setPending={setPending} />
           </TabsContent>
         </Tabs>
       </DialogContent>
