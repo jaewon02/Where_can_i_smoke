@@ -282,12 +282,12 @@ export default function App() {
       });
       kakao.maps.event.addListener(marker, "click", () => {
         if (z.type === "smoking") {
-          // 흡연시설: 오른쪽 패널에서 사진/후기 보기
+          // 흡연시설: 오른쪽 패널에서 상세 보기
           infoRef.current.close();
           setSelectedId(z.id);
           return;
         }
-        // 비흡연구역: 후기 없이 간단한 말풍선만
+        // 비흡연구역: 간단한 말풍선만
         setSelectedId(null);
         const el = document.createElement("div");
         el.className = "info";
@@ -562,7 +562,7 @@ export default function App() {
   useEffect(() => {
     if (!kakao) return;
     const map = new kakao.maps.Map(document.getElementById("map"), {
-      center: new kakao.maps.LatLng(37.4990, 127.0560), // 강남구 한가운데 (지역을 바꾸려면 이 좌표와 backend/facilities_tool.py 의 REGIONS 를 같이 바꿈)
+      center: new kakao.maps.LatLng(37.4990, 127.0560), // 강남구 한가운데
       level: 6,
     });
     mapRef.current = map;

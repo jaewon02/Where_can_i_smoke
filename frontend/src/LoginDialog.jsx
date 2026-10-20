@@ -13,7 +13,7 @@ const FIELDS = {
     { name: "password", label: "비밀번호", type: "password", autoComplete: "current-password" },
   ],
   signup: [
-    { name: "nickname", label: "닉네임", autoComplete: "nickname", hint: "1~20자, 후기에 보이는 이름" },
+    { name: "nickname", label: "닉네임", autoComplete: "nickname", hint: "1~20자" },
     { name: "user_id", label: "아이디", autoComplete: "username", hint: "영문 소문자·숫자·_ 4~20자" },
     { name: "password", label: "비밀번호", type: "password", autoComplete: "new-password", hint: "8~64자" },
   ],
@@ -82,7 +82,7 @@ export default function LoginDialog({ open, onOpenChange, onSuccess }) {
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>{tab === "login" ? "로그인" : "회원가입"}</DialogTitle>
-          <DialogDescription>로그인하면 후기를 남길 수 있어요.</DialogDescription>
+          <DialogDescription>아이디와 비밀번호로 로그인해요.</DialogDescription>
         </DialogHeader>
         <Tabs value={tab} onValueChange={(v) => !pending && setTab(v)}>
           <TabsList className="w-full">

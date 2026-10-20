@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-// 브라우저 저장 이름. ZonePanel.jsx가 후기 작성자 이름으로 쓰는 "nickname"과 겹치지 않게 auth_ 를 붙임
+// 브라우저 저장 이름
 export const TOKEN_KEY = "auth_token";
 export const NICKNAME_KEY = "auth_nickname";
 
