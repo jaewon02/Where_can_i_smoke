@@ -281,12 +281,12 @@ export default function App() {
       });
       kakao.maps.event.addListener(marker, "click", () => {
         if (z.type === "smoking") {
-          // 흡연시설: 오른쪽 패널에서 사진/후기 보기
+          // 흡연시설: 오른쪽 패널에서 상세 보기
           infoRef.current.close();
           setSelectedId(z.id);
           return;
         }
-        // 비흡연구역: 후기 없이 간단한 말풍선만
+        // 비흡연구역: 간단한 말풍선만
         setSelectedId(null);
         const el = document.createElement("div");
         el.className = "info";
