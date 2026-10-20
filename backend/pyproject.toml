@@ -9,8 +9,3 @@ dependencies = [
     "python-multipart==0.0.*",
     "uvicorn[standard]==0.32.*",
 ]
-
-[dependency-groups]
-dev = [
-    "shapely==2.2.*",
-]

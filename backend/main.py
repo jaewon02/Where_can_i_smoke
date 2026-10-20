@@ -9,22 +9,25 @@ from typing import Literal
 
 import httpx
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
 
 from auth import LoginIn, SignupIn, current_user, hash_password, issue_token, revoke_token, verify_password
-from db import get_conn, init_db
+from db import get_conn
 
-load_dotenv(Path(__file__).parent / ".env")
+load_dotenv()
 
 UPLOAD_DIR = Path(__file__).parent / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 MAX_PHOTOS = 4
 MAX_PHOTO_BYTES = 5 * 1024 * 1024
 
-app = FastAPI(title="흡연구역 지도 API")
+# 엔드포인트별로 쓸 DB 파일 (backend/ 안). backend/.env에 없으면 기본 이름을 씀
+ZONES_DB = os.getenv("ZONES_DB")  # 구역·후기·시설
+USERS_DB = os.getenv("USERS_DB")  # 회원 정보
+
+app = FastAPI(title="where_can_i_smoke")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://localhost:5174"],
@@ -32,11 +35,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.mount("/api/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
-
-
-@app.on_event("startup")
-def startup() -> None:
-    init_db()
 
 
 def sniff_image_ext(data: bytes) -> str | None:
@@ -71,7 +69,7 @@ def list_zones(
         params.append(type)
     sql += " GROUP BY z.id LIMIT ?"
     params.append(limit)
-    with get_conn() as conn:
+    with get_conn(ZONES_DB) as conn:
         return [dict(r) for r in conn.execute(sql, params)]
 
 
@@ -88,7 +86,7 @@ def list_facilities(
     area: 시설 경계선 기준으로 계산한 금연 구역(MultiPolygon). 경계선을 모르면 null 이고 r(m) 반경 원으로 그림.
     지하철역 점('subway')은 출입구('subway-exit')로 대체했으므로 내려주지 않음.
     """
-    with get_conn() as conn:
+    with get_conn(ZONES_DB) as conn:
         rows = conn.execute(
             "SELECT id, type_key, name, lat, lng, area, r FROM facilities "
             "WHERE type_key != 'subway' AND lat BETWEEN ? AND ? AND lng BETWEEN ? AND ? LIMIT ?",
@@ -102,32 +100,10 @@ def list_facilities(
         return out
 
 
-class FacilityIn(BaseModel):
-    kakao_id: str = Field(max_length=40)
-    type_key: str = Field(max_length=40)
-    name: str = Field(max_length=100)
-    lat: float
-    lng: float
-
-
-@app.post("/api/dev/facilities")
-def ingest_facilities(items: list[FacilityIn], request: Request):
-    """개발용: 브라우저(카카오 JS SDK)로 수집한 시설을 저장. ALLOW_DEV_INGEST=1 이고 같은 PC에서 온 요청만 허용"""
-    if os.getenv("ALLOW_DEV_INGEST") != "1" or (request.client and request.client.host not in ("127.0.0.1", "::1")):
-        raise HTTPException(404)
-    with get_conn() as conn:
-        conn.executemany(
-            "INSERT OR IGNORE INTO facilities (kakao_id, type_key, name, lat, lng) VALUES (?,?,?,?,?)",
-            [(i.kakao_id, i.type_key, i.name, i.lat, i.lng) for i in items],
-        )
-        total = conn.execute("SELECT COUNT(*) FROM facilities").fetchone()[0]
-    return {"received": len(items), "total": total}
-
-
 @app.get("/api/zones/{zone_id}")
 def get_zone(zone_id: int):
     """구역 상세 + 후기(사진 포함)"""
-    with get_conn() as conn:
+    with get_conn(ZONES_DB) as conn:
         zone = conn.execute("SELECT * FROM zones WHERE id = ?", (zone_id,)).fetchone()
         if not zone:
             raise HTTPException(404, "구역을 찾을 수 없습니다")
@@ -174,7 +150,7 @@ async def create_review(
             raise HTTPException(415, "JPG, PNG, WEBP 이미지만 올릴 수 있습니다")
         validated.append((data, ext))
 
-    with get_conn() as conn:
+    with get_conn(ZONES_DB) as conn:
         zone = conn.execute("SELECT type FROM zones WHERE id = ?", (zone_id,)).fetchone()
         if not zone:
             raise HTTPException(404, "구역을 찾을 수 없습니다")
@@ -218,7 +194,7 @@ NEAR_M = 50  # 출발지·도착지에서 이 거리 안의 흡연구역은 경�
 def smoking_candidates(from_lat: float, from_lng: float, to_lat: float, to_lng: float, limit: int = 3) -> list[dict]:
     """출발→도착 사이에 들르기 좋은 흡연구역 (직선 기준 덜 돌아가는 순)"""
     pad = 0.015  # 약 1.5km
-    with get_conn() as conn:
+    with get_conn(ZONES_DB) as conn:
         rows = conn.execute(
             "SELECT id, name, lat, lng FROM zones WHERE type = 'smoking'"
             " AND lat BETWEEN ? AND ? AND lng BETWEEN ? AND ?",
@@ -437,7 +413,7 @@ async def find_route(
 @app.post("/api/auth/signup", status_code=201, tags=["auth"])
 def signup(body: SignupIn):
     password_hash = hash_password(body.password)  # 시간이 걸리므로 DB를 열기 전에 계산
-    with get_conn() as conn:
+    with get_conn(USERS_DB) as conn:
         if conn.execute("SELECT 1 FROM users WHERE user_id = ?", (body.user_id,)).fetchone():
             raise HTTPException(409, "이미 쓰고 있는 아이디입니다")
         if conn.execute("SELECT 1 FROM users WHERE nickname = ?", (body.nickname,)).fetchone():
@@ -455,7 +431,7 @@ def signup(body: SignupIn):
 
 @app.post("/api/auth/login", tags=["auth"])
 def login(body: LoginIn):
-    with get_conn() as conn:
+    with get_conn(USERS_DB) as conn:
         user = conn.execute(
             "SELECT nickname, user_id, password_hash FROM users WHERE user_id = ?", (body.user_id,)
         ).fetchone()

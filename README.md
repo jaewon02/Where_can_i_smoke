@@ -21,8 +21,16 @@ npm run dev     # http://localhost:5173
 
 ## 데이터베이스 (SQLite)
 
-### `zones.db`
-사용 파일: `backend/db.py`, `backend/main.py`, `backend/seed.py`, `backend/sync.py`, `backend/facilities_tool.py`
+서버는 DB 파일이나 표를 만들지 않습니다. 미리 만들어 둔 `zones.db`, `users.db`를 `backend/` 폴더에 넣어야 하며, 파일이 없으면 해당 API에서 오류가 납니다.
+
+사용할 파일 이름은 `backend/.env`에 적습니다 (`backend/.env.example` 참고). 두 값 모두 필요합니다.
+```
+ZONES_DB=zones.db
+USERS_DB=users.db
+```
+
+### `zones.db` (`ZONES_DB`)
+사용하는 API: 구역 목록·상세, 후기 작성, 금연 규칙 대상 시설, 길찾기 흡연모드
 
 | 표 | 컬럼 |
 |---|---|
@@ -30,10 +38,10 @@ npm run dev     # http://localhost:5173
 | `reviews` | `id`, `zone_id`, `author`, `rating`, `content`, `created_at` |
 | `review_photos` | `id`, `review_id`, `filename` |
 | `facilities` | `id`, `kakao_id`, `type_key`, `name`, `lat`, `lng`, `area`, `r` |
-| `geocode_cache` | `address`, `lat`, `lng` |
+| `geocode_cache` | `address`, `lat`, `lng` (예전 데이터 입력용. 현재 코드에서는 쓰지 않음) |
 
-### `users.db`
-사용 파일: `backend/db.py`, `backend/main.py`
+### `users.db` (`USERS_DB`)
+사용하는 API: 회원가입, 로그인
 
 | 표 | 컬럼 |
 |---|---|
