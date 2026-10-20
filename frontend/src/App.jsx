@@ -15,6 +15,8 @@ const COLORS = { smoking: "#1f9d55", nonsmoking: "#e5484d" };
 // 카카오 지도 레벨은 숫자가 작을수록 많이 확대한 것. 화면이 복잡해지지 않게 확대했을 때만 금연구역을 보여줌
 const AREA_MAX_LEVEL = 3; // 이 레벨 이하로 확대했을 때만 금연구역 범위 표시
 const BADGE_MAX_LEVEL = 2; // 이 레벨 이하로 확대했을 때만 금연구역 배지 표시
+// 금연구역은 사용자 눈에는 보이지 않게 하고, 위치(GPS) 판단 등 내부에서만 쓸 예정. 개발 중 확인할 때만 true로
+const SHOW_NONSMOKING_AREAS = false;
 
 // 시설 범위의 큰 쪽 길이(m): 경계선 다각형이면 그 바깥 사각형, 아니면 반경 원의 지름
 function extentM(f) {
@@ -164,7 +166,7 @@ export default function App() {
   // 모든 금연 범위를 하나의 구역으로 합쳐 그림: 겹치는 부분의 선은 없애고, 구역마다 배지는 하나만 둠
   const drawAreas = () => {
     const map = mapRef.current;
-    const showAreas = map.getLevel() <= AREA_MAX_LEVEL; // 넓게 볼 때는 금연구역을 그리지 않음
+    const showAreas = SHOW_NONSMOKING_AREAS && map.getLevel() <= AREA_MAX_LEVEL; // 넓게 볼 때는 금연구역을 그리지 않음
     const areas = showAreas ? [...zoneAreasRef.current, ...facilityAreasRef.current] : [];
     // 지도를 움직여도 범위가 그대로면 다시 그리지 않음 (열려 있는 말풍선이 닫히지 않도록)
     // 배지는 많이 확대했을 때(레벨 2 이하)만 표시. 그보다 넓게 볼 때는 범위만 보여줌 (배지가 너무 빽빽해서)
@@ -213,7 +215,7 @@ export default function App() {
     const map = mapRef.current;
     const reqId = ++facilityReqRef.current;
     // 꺼져 있거나 너무 넓게 보고 있으면 조회하지 않고 지움 (넓게 볼 때는 어차피 그리지 않으니 서버 호출도 아낌)
-    if (!map || !flagsRef.current.showNon || map.getLevel() > AREA_MAX_LEVEL) {
+    if (!SHOW_NONSMOKING_AREAS || !map || !flagsRef.current.showNon || map.getLevel() > AREA_MAX_LEVEL) {
       facilityAreasRef.current = [];
       return drawAreas();
     }
@@ -581,7 +583,7 @@ export default function App() {
           {sidebarOpen ? "◀" : "▶"}
         </button>
       </aside>
-      {showNon && zoomLevel > AREA_MAX_LEVEL && <div className="hint">금연구역은 지도를 더 확대하면 보여요</div>}
+      {SHOW_NONSMOKING_AREAS && showNon && zoomLevel > AREA_MAX_LEVEL && <div className="hint">금연구역은 지도를 더 확대하면 보여요</div>}
       <div className="credit">경계선: © OpenStreetMap contributors</div>
       {selectedId && <ZonePanel zoneId={selectedId} onClose={() => setSelectedId(null)} onRoutePick={pickRoutePoint} />}
       {rouletteOpen && <Roulette onClose={() => setRouletteOpen(false)} />}
@@ -619,14 +621,16 @@ export default function App() {
         >
           <CigaretteIcon />
         </button>
-        <button
-          className={`fab sub nonsmoking ${showNon ? "on" : ""}`}
-          title={`비흡연구역·금연시설 ${showNon ? "숨기기" : "보기"}`}
-          aria-pressed={showNon}
-          onClick={() => setShowNon((v) => !v)}
-        >
-          <CigaretteIcon slash />
-        </button>
+        {SHOW_NONSMOKING_AREAS && (
+          <button
+            className={`fab sub nonsmoking ${showNon ? "on" : ""}`}
+            title={`비흡연구역·금연시설 ${showNon ? "숨기기" : "보기"}`}
+            aria-pressed={showNon}
+            onClick={() => setShowNon((v) => !v)}
+          >
+            <CigaretteIcon slash />
+          </button>
+        )}
       </div>
     </div>
   );
