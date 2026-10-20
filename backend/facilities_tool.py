@@ -11,14 +11,17 @@
 카카오는 시설의 '점' 위치만 주기 때문에, 금연 거리를 시설 경계선에서 재려고 오픈스트리트맵(OSM)의 윤곽선을 씁니다.
   - 카카오 시설 점이 OSM 윤곽선(학교, 어린이집, 병원, 도서관, 공원, 놀이터) 안에 있으면 그 윤곽선을 시설 경계로 보고,
     경계선 바깥으로 법정 거리만큼 넓힌 다각형을 금연 구역(area)으로 저장합니다.
-  - 윤곽선을 못 찾으면 점 위치 + 근사 반경(r)을 씁니다.
-  - 지하철은 역 중심이 아니라 OSM의 출입구 위치(10m)를 씁니다.
+  - 시설 윤곽선이 없으면(주로 상가 건물에 입점한 어린이집·유치원) 점이 들어 있는 OSM 건물 윤곽선을 시설 경계로 봅니다.
+  - 그것도 못 찾으면 점 위치 + 근사 반경(r)을 씁니다.
+  - 지하철은 역 중심이 아니라 출입구 위치(10m)를 씁니다. OSM 출입구 좌표는 카카오 지도의 출구 아이콘과 평균 14m
+    어긋나서, 카카오에서 같은 출구가 검색되면 그 위치로 맞춥니다 (KAKAO_REST_API_KEY 필요, 없으면 OSM 좌표 그대로).
 저장소에 JSON이 들어 있어서, 새로 받은 PC에서는 `load` 한 번이면 카카오/OSM 접속 없이 같은 데이터를 쓸 수 있습니다.
 
 지도 데이터: © OpenStreetMap contributors (ODbL)  https://www.openstreetmap.org/copyright
 """
 import json
 import math
+import os
 import re
 import sys
 import time
@@ -31,7 +34,11 @@ from shapely.geometry import LineString, Point, Polygon, mapping
 from shapely.ops import linemerge, polygonize, unary_union
 from shapely.strtree import STRtree
 
+from dotenv import load_dotenv
+
 from db import get_conn, init_db
+
+load_dotenv(Path(__file__).parent / ".env")
 
 DATA_DIR = Path(__file__).parent / "data"
 CACHE_DIR = Path(__file__).parent / ".cache"
@@ -93,6 +100,12 @@ OSM_GROUPS = {
 EXTRA_FROM_OSM = {"park", "playground"}  # 카카오에 없는 OSM 윤곽선도 시설로 추가할 종류
 MAX_FOOTPRINT_M2 = 300_000  # 공원/놀이터가 아닌데 이보다 크면 엉뚱한 윤곽선으로 보고 무시
 MIN_FOOTPRINT_M2 = 30
+# 윤곽선 없는 시설에 건물 윤곽선을 적용할 유형. 병원은 병원급(이름 기준)만 (의원·치과는 그리지 않으니까)
+BUILDING_TYPES = {"childcare", "kindergarten", "library", "office-community", "office-district", "hospital"}
+HOSPITAL_DRAWN = re.compile("병원|의료원|보건소|보건지소")
+MAX_BUILDING_M2 = 40_000  # 이보다 큰 건물은 단지/공장 등 엉뚱한 윤곽선으로 보고 무시
+BUILDING_NEAR_M = 8  # 점이 건물 안에 없으면 이 거리 안의 가장 가까운 건물
+EXIT_KAKAO_MAX_M = 80  # OSM 출입구와 이 거리 안에서 찾은 카카오 출구만 같은 출구로 인정
 STATION_MAX_M = 250  # 출입구와 가장 가까운 카카오 지하철역이 이 거리 안이어야 해당 구 역으로 인정
 
 # 위도/경도 <-> 미터 변환 (서울 동남권 일대에서는 평면 근사로 충분)
@@ -180,6 +193,96 @@ def to_area_json(geom_m, buffer_m: float) -> str | None:
     return json.dumps(result, separators=(",", ":")) if result else None
 
 
+def fetch_buildings(region: str, points: list[tuple[float, float]], refresh: bool) -> list[dict]:
+    """시설 점 주변(40m)의 OSM 건물 윤곽선(way)을 받아 캐시. 150개 점씩 나눠 요청"""
+    cache = CACHE_DIR / f"buildings_{region}.json"
+    if cache.exists() and not refresh:
+        return json.loads(cache.read_text(encoding="utf-8"))
+    found: dict[int, dict] = {}
+    for i in range(0, len(points), 150):
+        chunk = points[i : i + 150]
+        parts = "".join(f'way(around:40,{lat:.6f},{lng:.6f})["building"];' for lat, lng in chunk)
+        query = f"[out:json][timeout:120];({parts});out tags geom;"
+        for attempt in range(4):
+            resp = httpx.post(
+                OVERPASS_URL, data={"data": query}, headers={"User-Agent": "smoking-zone-map-dev/0.1", "Accept": "application/json"}, timeout=180
+            )
+            if resp.status_code == 200:
+                break
+            time.sleep(5 * (attempt + 1))
+        resp.raise_for_status()
+        for el in resp.json()["elements"]:
+            found[el["id"]] = {"id": el["id"], "geometry": el.get("geometry")}
+        print(f"  건물 윤곽선 조회 {min(i + 150, len(points))}/{len(points)} (누적 {len(found)}개)", flush=True)
+        time.sleep(2)
+    cache.parent.mkdir(exist_ok=True)
+    out = list(found.values())
+    cache.write_text(json.dumps(out, separators=(",", ":")), encoding="utf-8")
+    return out
+
+
+def building_polygons(elements: list[dict]) -> list:
+    """OSM 건물 way -> 미터 좌표계 폴리곤 (닫히지 않은 선, 너무 작거나 큰 것은 제외)"""
+    out = []
+    for el in elements:
+        pts = [(g["lon"], g["lat"]) for g in (el.get("geometry") or [])]
+        if len(pts) < 4 or pts[0] != pts[-1]:
+            continue
+        try:
+            poly = shapely.transform(Polygon(pts), to_m)
+            if not poly.is_valid:
+                poly = poly.buffer(0)
+        except ValueError:
+            continue
+        if not poly.is_empty and poly.geom_type == "Polygon" and MIN_FOOTPRINT_M2 <= poly.area <= MAX_BUILDING_M2:
+            out.append(poly)
+    return out
+
+
+def kakao_exit_positions(region: str, exits: list[dict], refresh: bool) -> dict[str, tuple[float, float]]:
+    """OSM 출입구 id -> 카카오 지도에 보이는 같은 출구의 (lat, lng). 못 찾은 출구는 빠짐. 결과는 캐시"""
+    cache = CACHE_DIR / f"kakao_exits_{region}.json"
+    done = json.loads(cache.read_text(encoding="utf-8")) if cache.exists() and not refresh else {}
+    key = os.getenv("KAKAO_REST_API_KEY", "").strip()
+    if not key:
+        if not done:
+            print("KAKAO_REST_API_KEY 가 없어 출입구 위치를 OSM 좌표 그대로 씁니다")
+        return {k: tuple(v) for k, v in done.items() if v}
+    pending = [e for e in exits if e["id"] not in done]
+    for n, e in enumerate(pending, 1):
+        m = re.match(r"(.+?역)\s.*?(\d+)번 출입구$", e["name"])
+        pos = None
+        if m:
+            station, num = m.groups()
+            resp = httpx.get(
+                "https://dapi.kakao.com/v2/local/search/keyword.json",
+                params={"query": f"{station} {num}번 출구", "x": e["lng"], "y": e["lat"], "radius": 300, "size": 5},
+                headers={"Authorization": f"KakaoAK {key}"},
+                timeout=20,
+            )
+            if resp.status_code == 200:
+                best = None
+                for d in resp.json().get("documents", []):
+                    # '강남역 신분당선 5번출구' 형태만 ('일원역1번출구약국' 같은 가게 이름은 제외)
+                    if not re.fullmatch(rf"{re.escape(station)}\s*(\S+선\s*)?{num}번\s*출구", d["place_name"]):
+                        continue
+                    dist = math.hypot((float(d["x"]) - e["lng"]) * KX, (float(d["y"]) - e["lat"]) * KY)
+                    if dist <= EXIT_KAKAO_MAX_M and (best is None or dist < best[0]):
+                        best = (dist, float(d["y"]), float(d["x"]))
+                if best:
+                    pos = [best[1], best[2]]
+            elif resp.status_code in (401, 403, 429):
+                print(f"카카오 검색 실패({resp.status_code}) - 여기까지의 결과만 저장하고 멈춥니다")
+                break
+        done[e["id"]] = pos
+        if n % 50 == 0:
+            print(f"  카카오 출구 검색 {n}/{len(pending)}", flush=True)
+        time.sleep(0.05)
+    cache.parent.mkdir(exist_ok=True)
+    cache.write_text(json.dumps(done), encoding="utf-8")
+    return {k: tuple(v) for k, v in done.items() if v}
+
+
 def build(region: str, refresh: bool) -> None:
     init_db()
     where, params_bbox = in_bbox_sql(REGIONS[region]["bbox"])
@@ -218,9 +321,35 @@ def build(region: str, refresh: bool) -> None:
                     area = to_area_json(best["geom"], buffer_m)
                     used.add(best["id"])
                     matched += 1
-            updates.append((area, None if area else float(fallback_r), row["id"]))
-        conn.executemany("UPDATE facilities SET area = ?, r = ? WHERE id = ?", updates)
-        print(f"카카오 시설 {len(updates)}개 중 윤곽선 매칭 {matched}개 (나머지는 근사 반경)")
+            updates.append([area, None if area else float(fallback_r), row["id"]])
+
+        # 시설 윤곽선이 없는 시설(상가 건물에 입점한 어린이집 등)은 점이 들어 있는 건물 윤곽선을 경계로 씀
+        by_id = {u[2]: u for u in updates}
+        todo = [
+            r for r in rows
+            if r["type_key"] in BUILDING_TYPES and r["id"] in by_id and by_id[r["id"]][0] is None
+            and (r["type_key"] != "hospital" or HOSPITAL_DRAWN.search(r["name"]))
+        ]
+        by_building = 0
+        if todo:
+            blds = building_polygons(fetch_buildings(region, [(r["lat"], r["lng"]) for r in todo], refresh))
+            btree = STRtree(blds)
+            for r in todo:
+                pt = Point(*pt_m(r["lng"], r["lat"]))
+                inside = [blds[i] for i in btree.query(pt, predicate="within")]
+                if inside:
+                    b = min(inside, key=lambda g: g.area)  # 겹치면 가장 작은(구체적인) 건물
+                else:
+                    near = [g for g in (blds[i] for i in btree.query(pt.buffer(BUILDING_NEAR_M))) if g.distance(pt) <= BUILDING_NEAR_M]
+                    if not near:
+                        continue
+                    b = min(near, key=lambda g: g.distance(pt))
+                area = to_area_json(b, RULES[r["type_key"]][0])
+                if area:
+                    by_id[r["id"]][0], by_id[r["id"]][1] = area, None
+                    by_building += 1
+        conn.executemany("UPDATE facilities SET area = ?, r = ? WHERE id = ?", [tuple(u) for u in updates])
+        print(f"카카오 시설 {len(updates)}개 중 시설 윤곽선 매칭 {matched}개, 건물 윤곽선 {by_building}개 (나머지는 근사 반경)")
 
         # 카카오에 없는 공원/놀이터 윤곽선은 시설로 추가
         extras = []
@@ -236,7 +365,7 @@ def build(region: str, refresh: bool) -> None:
             extras.append((f"osm:{p['id']}", tk, name, c.y, c.x, area, None))
         # 지하철 출입구: 역 중심이 아니라 출입구에서 10m. 이름은 가장 가까운 카카오 지하철역에서 가져옴
         stations = [(r["name"], Point(*pt_m(r["lng"], r["lat"]))) for r in rows if r["type_key"] == "subway"]
-        exits = 0
+        exit_nodes = []
         for el in elements:
             if el.get("tags", {}).get("railway") != "subway_entrance" or el["type"] != "node":
                 continue
@@ -247,8 +376,14 @@ def build(region: str, refresh: bool) -> None:
             if st.distance(pt) > STATION_MAX_M:
                 continue  # 이 구 밖 역의 출입구
             ref = el["tags"].get("ref")
-            extras.append((f"osm:node/{el['id']}", "subway-exit", f"{name} {ref}번 출입구" if ref else f"{name} 출입구", el["lat"], el["lon"], None, 10.0))
-            exits += 1
+            exit_nodes.append({"id": f"osm:node/{el['id']}", "name": f"{name} {ref}번 출입구" if ref else f"{name} 출입구", "lat": el["lat"], "lng": el["lon"]})
+        # OSM 출입구 좌표는 카카오 지도의 출구 아이콘과 어긋나므로, 카카오에서 같은 출구를 찾으면 그 위치로 맞춤
+        kakao_pos = kakao_exit_positions(region, exit_nodes, refresh)
+        for e in exit_nodes:
+            lat, lng = kakao_pos.get(e["id"], (e["lat"], e["lng"]))
+            extras.append((e["id"], "subway-exit", e["name"], lat, lng, None, 10.0))
+        exits = len(exit_nodes)
+        print(f"  출입구 {exits}개 중 카카오 위치로 맞춘 것 {len(kakao_pos)}개")
         # 버스정류장: 서울시 조례는 '버스정류소 및 택시 승차대'를 금연구역으로 지정하지만 거리 규정은 없음 -> 정류장 위치에 임시 반경
         buses = 0
         for el in elements:
