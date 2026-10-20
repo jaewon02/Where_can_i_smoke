@@ -176,12 +176,6 @@ body { margin: 0; font-family: system-ui, "Noto Sans KR", sans-serif; }
 .rr-foot { display: flex; align-items: center; margin-top: 6px; }
 .rr-foot .link-btn { margin-left: auto; }
 
-/* 내 위치 파란 점 */
-.my-loc {
-  width: 16px; height: 16px; border-radius: 50%; background: #1e88e5;
-  border: 3px solid #fff; box-shadow: 0 0 0 6px rgba(30,136,229,.25), 0 1px 4px rgba(0,0,0,.4);
-}
-
 /* 길찾기 출발/도착 입력 */
 .route-fields { display: flex; gap: 8px; padding: 4px 14px 12px; flex: none; }
 .route-inputs { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
@@ -345,7 +339,7 @@ body { margin: 0; font-family: system-ui, "Noto Sans KR", sans-serif; }
 .map-ad.right { right: 14px; bottom: 28px; }
 .map-ad.left { left: 14px; bottom: 28px; transition: left .25s ease; }
 .app.sidebar-open .map-ad.left { left: calc(var(--sidebar-w) + 14px); }
-.map-ad.top { top: 76px; right: 14px; max-width: min(560px, calc(100vw - 28px)); }
+.map-ad.top { top: 96px; right: 14px; max-width: min(560px, calc(100vw - 28px)); }
 @media (max-width: 900px) {
   .map-ad.left { display: none; } /* 좁은 화면에선 오른쪽 아래 카드와 겹치므로 생략 */
   .app.sidebar-open .map-ad.top { display: none; }
@@ -474,3 +468,33 @@ body { margin: 0; font-family: system-ui, "Noto Sans KR", sans-serif; }
 .app.sidebar-open .smoke-slider { left: calc(var(--sidebar-w) + 14px); }
 @media (max-width: 600px) { .app.sidebar-open .smoke-slider { left: 14px; } }
 @media (prefers-reduced-motion: reduce) { .smoke-slider, .smoke-slider-knob { transition: none; } .smoke-cig.lit .smoke-tip, .smoke-wisp { animation: none; } }
+
+/* 내 위치 마커 끌기 켜기/끄기: 지도 왼쪽 아래 구석의 작은 슬라이더 */
+.gps-drag-toggle {
+  position: absolute; left: 8px; bottom: 6px; z-index: 10; display: inline-flex; align-items: center; gap: 5px;
+  height: 22px; padding: 0 7px 0 3px; border: 0; border-radius: 11px; background: rgba(255, 255, 255, .92);
+  font: inherit; font-size: 11px; color: #666; cursor: pointer; white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .25); transition: left .25s ease;
+}
+.gps-drag-track { position: relative; width: 28px; height: 16px; border-radius: 8px; background: #b8bcc2; transition: background .2s; }
+.gps-drag-knob {
+  position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .3); transition: transform .2s ease;
+}
+.gps-drag-toggle.on { color: #1565c0; }
+.gps-drag-toggle.on .gps-drag-track { background: #1e88e5; }
+.gps-drag-toggle.on .gps-drag-knob { transform: translateX(12px); }
+.gps-drag-toggle:focus-visible { outline: 2px solid #1e88e5; outline-offset: 2px; }
+.app.sidebar-open .gps-drag-toggle { left: calc(var(--sidebar-w) + 8px); }
+@media (max-width: 600px) { .app.sidebar-open .gps-drag-toggle { left: 8px; } }
+@media (prefers-reduced-motion: reduce) { .gps-drag-toggle, .gps-drag-track, .gps-drag-knob { transition: none; } }
+
+/* 로그인 버튼 아래 [내 위치로] 버튼 */
+.my-pos-btn {
+  position: absolute; top: 54px; right: 14px; z-index: 10; display: grid; place-items: center;
+  width: 34px; height: 34px; padding: 0; border: 0; border-radius: 50%; background: #fff; color: #1e88e5;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .3); cursor: pointer;
+}
+.my-pos-btn:hover { background: #f2f6fc; }
+.my-pos-btn:active { transform: scale(.94); }
+.my-pos-btn:focus-visible { outline: 3px solid #1e88e5; outline-offset: 2px; }
