@@ -39,8 +39,9 @@ USERS_DB=users.db
 | `geocode_cache` | `address`, `lat`, `lng` (예전 데이터 입력용. 현재 코드에서는 쓰지 않음) |
 
 ### `users.db` (`USERS_DB`)
-사용하는 API: 회원가입, 로그인
+사용하는 API: 회원가입, 로그인, 후기 목록·작성·삭제
 
 | 표 | 컬럼 |
 |---|---|
 | `users` | `id`, `nickname`, `user_id`, `password_hash`, `created_at` |
+| `reviews` | `id`, `target_type`(`zone`/`place`), `target_id`, `author_id`(→ `users.id`), `rating`(1~5), `content`(1~500자), `created_at` |
