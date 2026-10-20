@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 
 const TYPE_LABEL = { smoking: "흡연구역", nonsmoking: "비흡연구역" };
 
-// 오른쪽 흡연구역 패널 (후기 보기). 지도에서 이미 불러온 구역 정보(zone)만 보여주고 서버·DB는 따로 부르지 않음
+// 오른쪽 후기 패널 (후기 보기). 흡연구역 또는 일반 장소(type: "place", label: 종류)의 정보만 보여주고 서버·DB는 따로 부르지 않음
 export default function ZonePanel({ zone, onClose }) {
   const closeRef = useRef(null);
 
@@ -26,7 +26,7 @@ export default function ZonePanel({ zone, onClose }) {
 
       <div className="panel-body">
         <header className="panel-head">
-          <span className={`badge ${zone.type}`}>{TYPE_LABEL[zone.type]}</span>
+          <span className={`badge ${zone.type}`}>{TYPE_LABEL[zone.type] ?? zone.label}</span>
           <h2>{zone.name}</h2>
           {zone.address && zone.address !== zone.name && <p className="addr">{zone.address}</p>}
           {zone.note && <p className="note">{zone.note}</p>}

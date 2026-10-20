@@ -85,8 +85,8 @@ export default function App() {
   const [selectedId, setSelectedId] = useState(null); // 정보 카드를 띄운 흡연구역 (사이드바 목록 선택 표시)
   const { user, remember } = useAuth();
   const [loginOpen, setLoginOpen] = useState(false); // 후기 보기를 눌렀는데 로그인 전이면 띄우는 로그인 창
-  const pendingReviewRef = useRef(null); // 로그인 뒤 후기 패널을 열 구역
-  const [reviewZone, setReviewZone] = useState(null); // 오른쪽 후기 패널에 보여줄 흡연구역 (지도에서 불러온 구역 정보)
+  const pendingReviewRef = useRef(null); // 로그인 뒤 후기 패널을 열 흡연구역·장소
+  const [reviewZone, setReviewZone] = useState(null); // 오른쪽 후기 패널에 보여줄 흡연구역 또는 일반 장소 (카드에 있던 정보)
   const [showSmoking, setShowSmoking] = useState(false); // 흡연모드 (지도 왼쪽 위 버튼). 켜면 흡연구역 핀이 보이고, 길찾기에서 흡연구역을 들르고, 금연 안내와 오늘의 담배가 나타남 (꺼져 있으면 안 보임)
   const [showNon, setShowNon] = useState(true); // 비흡연구역 + 주변 금연시설
   const [zoomLevel, setZoomLevel] = useState(6); // 지금 지도 확대 레벨 (금연구역을 보여줄지 안내하는 데 사용)
@@ -526,14 +526,21 @@ export default function App() {
       });
     }
     q(".cc-note").textContent = place.note ?? "";
-    // 후기 보기 (흡연구역 카드만): 로그인했으면 오른쪽 패널에 후기, 아니면 로그인 창을 띄움
-    if (place.zone) {
-      q(".cc-reviews").onclick = () => {
-        if (isLoggedIn()) return setReviewZone(place.zone);
-        pendingReviewRef.current = place.zone; // 로그인하면 이어서 후기 패널을 엶
-        setLoginOpen(true);
-      };
-    } else q(".cc-reviews").remove();
+    // 후기 보기 (흡연구역·일반 장소 카드 모두): 로그인했으면 오른쪽 패널에 후기, 아니면 로그인 창을 띄움
+    // 일반 장소는 카드에 있는 정보로 패널 내용을 만듦 (서버·DB는 부르지 않음)
+    const reviewTarget = place.zone ?? {
+      id: place.id,
+      type: "place",
+      label: cat || "장소",
+      name: place.name,
+      address: road || place.jibunAddress,
+      note: place.phone ? `☎ ${place.phone}` : "",
+    };
+    q(".cc-reviews").onclick = () => {
+      if (isLoggedIn()) return setReviewZone(reviewTarget);
+      pendingReviewRef.current = reviewTarget; // 로그인하면 이어서 후기 패널을 엶
+      setLoginOpen(true);
+    };
     if (place.onPin) el.classList.add("cc-on-pin"); // 핀 마커 위에 띄울 때는 핀을 가리지 않게 더 위로
     const phone = q(".cc-phone");
     phone.textContent = place.phone;
