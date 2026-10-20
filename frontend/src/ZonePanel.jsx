@@ -3,7 +3,7 @@ import ReviewSection from "./ReviewSection.jsx";
 
 const TYPE_LABEL = { smoking: "흡연구역", nonsmoking: "비흡연구역" };
 
-// 오른쪽 후기 패널. zone: 흡연구역 정보 또는 일반 장소 { kind: "place", id(카카오 장소 번호), name, address, group }. 후기는 서버에서 불러옴
+// 오른쪽 후기 패널 (후기 보기). 흡연구역 또는 일반 장소(type: "place", label: 종류). 후기는 서버에서 불러옴
 export default function ZonePanel({ zone, onClose, onAuthExpired }) {
   const closeRef = useRef(null);
 
@@ -27,7 +27,7 @@ export default function ZonePanel({ zone, onClose, onAuthExpired }) {
 
       <div className="panel-body">
         <header className="panel-head">
-          {zone.kind === "place" ? <span className="badge bg-gray-600">{zone.group || "장소"}</span> : <span className={`badge ${zone.type}`}>{TYPE_LABEL[zone.type]}</span>}
+          <span className={`badge ${zone.type}`}>{TYPE_LABEL[zone.type] ?? zone.label}</span>
           <h2>{zone.name}</h2>
           {zone.address && zone.address !== zone.name && <p className="addr">{zone.address}</p>}
           {zone.note && <p className="note">{zone.note}</p>}
