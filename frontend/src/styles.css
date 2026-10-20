@@ -376,6 +376,8 @@ body { margin: 0; font-family: system-ui, "Noto Sans KR", sans-serif; }
   position: relative; display: flex; flex-direction: column; width: 300px; max-width: calc(100vw - 40px);
   margin-bottom: 14px; padding: 16px 16px 14px; border-radius: 10px; background: #fff;
   box-shadow: 0 4px 16px rgba(0,0,0,.25); font-size: 13px; text-align: left; color: #333; line-height: 1.45;
+  /* 카카오 오버레이 바깥 요소가 줄바꿈을 막아서(nowrap) 긴 이름·주소가 카드 밖으로 넘치므로 다시 허용 */
+  white-space: normal; word-break: keep-all; overflow-wrap: anywhere;
 }
 .click-card::after { /* 아래쪽 말풍선 꼬리 */
   content: ""; position: absolute; left: 50%; bottom: -7px; width: 14px; height: 14px;
@@ -387,9 +389,19 @@ body { margin: 0; font-family: system-ui, "Noto Sans KR", sans-serif; }
 .click-card p { margin: 0; }
 .click-card .cc-addr { margin-top: 8px; color: #333; font-size: 13px; }
 .cc-sub { display: flex; flex-wrap: wrap; gap: 0 6px; color: #888; font-size: 12px; }
+.cc-note { color: #555; font-size: 12px; }
+.cc-note:empty { display: none; }
+.click-card.cc-on-pin { margin-bottom: 52px; } /* 흡연구역 핀(높이 약 46px) 위에 뜨도록 */
 .cc-phone { margin-top: 2px; color: #1f9d55; font-size: 13px; text-decoration: none; }
 .cc-phone:hover { text-decoration: underline; }
 .cc-addr:empty, .cc-cat:empty, .cc-sub span:empty, .cc-phone:empty { display: none; }
+/* 흡연구역 카드의 [후기 보기] (로그인했으면 오른쪽 패널에 후기) */
+.cc-reviews {
+  margin-top: 12px; height: 38px; border: 1px solid #1f9d55; border-radius: 4px; background: #fff;
+  color: #1f9d55; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
+}
+.cc-reviews:hover { background: #eef8f2; }
+.cc-reviews:focus-visible { outline: 3px solid #90caf9; outline-offset: 2px; }
 .cc-actions { display: flex; gap: 6px; margin-top: 12px; }
 .cc-actions button {
   height: 40px; border: 1px solid #ddd; border-radius: 4px; background: #fff;

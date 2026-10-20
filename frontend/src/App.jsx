@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useKakao } from "./useKakaoMap.js";
 import { RULE_BY_KEY } from "./facilities.js";
-import ZonePanel from "./ZonePanel.jsx";
 import SearchBox from "./SearchBox.jsx";
 import ZoneList from "./ZoneList.jsx";
 import RoutePanel, { ME } from "./RoutePanel.jsx";
@@ -9,6 +8,9 @@ import Roulette from "./Roulette.jsx";
 import QuitAd from "./QuitAd.jsx";
 import { buildAreas } from "./areas.js";
 import LoginButton from "./LoginButton.jsx";
+import LoginDialog from "./LoginDialog.jsx";
+import ZonePanel from "./ZonePanel.jsx";
+import { isLoggedIn, useAuth } from "./auth.js";
 import { findPlacesAt, LABEL_PRIORITY } from "./nearbyPlaces.js";
 
 // 흡연자 기준 색: 피워도 되는 곳(흡연구역)은 초록, 피우면 안 되는 곳(금연구역)은 빨강. styles.css 의 --smoking / --nonsmoking 과 같은 값
@@ -91,7 +93,11 @@ export default function App() {
   const [routeEnd, setRouteEnd] = useState(null); // 길찾기 도착지
   const [smokingMode, setSmokingMode] = useState(false); // 길찾기 흡연모드 (켜면 금연 안내가 더 많이 뜸)
   const [adClosed, setAdClosed] = useState(false); // 지도 위 금연 안내 카드 닫음 (흡연모드에선 못 닫음)
-  const [selectedId, setSelectedId] = useState(null); // 오른쪽 상세 패널에 보여줄 구역
+  const [selectedId, setSelectedId] = useState(null); // 정보 카드를 띄운 흡연구역 (사이드바 목록 선택 표시)
+  const { user, remember } = useAuth();
+  const [loginOpen, setLoginOpen] = useState(false); // 후기 보기를 눌렀는데 로그인 전이면 띄우는 로그인 창
+  const pendingReviewRef = useRef(null); // 로그인 뒤 후기 패널을 열 구역
+  const [reviewZone, setReviewZone] = useState(null); // 오른쪽 후기 패널에 보여줄 흡연구역 (지도에서 불러온 구역 정보)
   const [showSmoking, setShowSmoking] = useState(true);
   const [showNon, setShowNon] = useState(true); // 비흡연구역 + 주변 금연시설
   const [zoomLevel, setZoomLevel] = useState(6); // 지금 지도 확대 레벨 (금연구역을 보여줄지 안내하는 데 사용)
@@ -157,7 +163,7 @@ export default function App() {
           ? "※ 시설의 정확한 경계를 몰라 위치 기준으로 추정한 범위입니다"
           : "※ 일부 시설은 경계선 대신 위치 기준으로 추정한 범위입니다";
     el.append(document.createElement("br"), note);
-    setSelectedId(null);
+    closeClickCard(); // 열려 있던 정보 카드는 닫음
     infoRef.current.setContent(el);
     infoRef.current.open(mapRef.current, marker);
   };
@@ -281,14 +287,9 @@ export default function App() {
         title: z.name,
       });
       kakao.maps.event.addListener(marker, "click", () => {
-        if (z.type === "smoking") {
-          // 흡연시설: 오른쪽 패널에서 상세 보기
-          infoRef.current.close();
-          setSelectedId(z.id);
-          return;
-        }
+        if (z.type === "smoking") return openZoneCard(z); // 흡연구역: 핀 위에 정보 카드
         // 비흡연구역: 간단한 말풍선만
-        setSelectedId(null);
+        closeClickCard();
         const el = document.createElement("div");
         el.className = "info";
         el.innerHTML = `<b></b><br><small></small><br><small></small>`;
@@ -310,7 +311,7 @@ export default function App() {
     if (!map) return;
     const pos = new kakao.maps.LatLng(place.lat, place.lng);
     infoRef.current.close();
-    setSelectedId(null);
+    closeClickCard();
     searchMarkerRef.current?.setMap(null);
     searchMarkerRef.current = new kakao.maps.Marker({ map, position: pos, title: place.name, zIndex: 2 });
     searchedPlaceRef.current = place;
@@ -422,6 +423,7 @@ export default function App() {
     clickReqRef.current++;
     clickCardRef.current?.setMap(null);
     clickCardRef.current = null;
+    setSelectedId(null); // 흡연구역 카드였다면 목록의 선택 표시도 해제
   };
 
   // 지도의 장소(주민센터, 은행, 아파트, 상가, 일반 가게, 버스정류장 등)를 누르면 그 장소의 정보 카드를 띄움
@@ -485,7 +487,9 @@ export default function App() {
       <div class="cc-head"><b class="cc-title"></b><span class="cc-cat"></span></div>
       <p class="cc-addr"></p>
       <p class="cc-sub"><span class="cc-zip"></span><span class="cc-jibun"></span></p>
+      <p class="cc-note"></p>
       <a class="cc-phone"></a>
+      <button type="button" class="cc-reviews">후기 보기</button>
       <div class="cc-actions">
         <button type="button" class="cc-copy" title="주소 복사" aria-label="주소 복사">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg>
@@ -532,6 +536,16 @@ export default function App() {
         if (status === kakao.maps.services.Status.OK) setZip(res[0]?.road_address?.zone_no);
       });
     }
+    q(".cc-note").textContent = place.note ?? "";
+    // 후기 보기 (흡연구역 카드만): 로그인했으면 오른쪽 패널에 후기, 아니면 로그인 창을 띄움
+    if (place.zone) {
+      q(".cc-reviews").onclick = () => {
+        if (isLoggedIn()) return setReviewZone(place.zone);
+        pendingReviewRef.current = place.zone; // 로그인하면 이어서 후기 패널을 엶
+        setLoginOpen(true);
+      };
+    } else q(".cc-reviews").remove();
+    if (place.onPin) el.classList.add("cc-on-pin"); // 핀 마커 위에 띄울 때는 핀을 가리지 않게 더 위로
     const phone = q(".cc-phone");
     phone.textContent = place.phone;
     if (place.phone) phone.href = `tel:${place.phone}`;
@@ -550,12 +564,74 @@ export default function App() {
       zIndex: 6,
       clickable: true,
     });
+    keepCardInView(el);
   };
 
-  // 사이드바 목록에서 흡연구역을 고르면 오른쪽 상세 패널 열기 (목록은 화면 안 구역이라 지도는 그대로)
-  const pickZone = (z) => {
+  // 로그인 창에서 로그인/회원가입에 성공하면: 로그인 상태 기억 + 후기 보기를 누르다 온 경우 이어서 후기 패널
+  const onLoginSuccess = (result) => {
+    remember(result);
+    setLoginOpen(false);
+    if (pendingReviewRef.current) setReviewZone(pendingReviewRef.current);
+    pendingReviewRef.current = null;
+  };
+
+  // 카드가 화면 가장자리나 왼쪽 사이드바, 위쪽 버튼들에 가려지면 카드가 다 보이도록 지도를 옮김
+  // 카카오 오버레이는 조금 뒤에 화면에 붙으므로, 붙을 때까지 잠깐씩 기다렸다가 잼
+  const keepCardInView = (el, tries = 10) => {
+    if (!el.isConnected || !el.getBoundingClientRect().width) {
+      if (tries > 0) setTimeout(() => keepCardInView(el, tries - 1), 30);
+      return;
+    }
+    const map = mapRef.current;
+    const box = document.getElementById("map").getBoundingClientRect();
+    const sidebar = document.querySelector(".sidebar.open")?.getBoundingClientRect();
+    const pad = 12;
+    const left = Math.max(box.left, sidebar && sidebar.right < box.right - 200 ? sidebar.right : box.left) + pad;
+    const top = box.top + 64; // 위쪽 흡연/금연 버튼과 로그인 버튼 자리
+    const panel = document.querySelector(".panel")?.getBoundingClientRect(); // 오른쪽 후기 패널
+    const right = (panel && panel.left > box.left + 300 ? Math.min(box.right, panel.left) : box.right) - pad;
+    const bottom = box.bottom - pad;
+    const r = el.getBoundingClientRect();
+    // 사이드바와 패널 사이가 카드보다 좁으면 오른쪽(패널 쪽)에 맞춤 -> 카드 왼쪽 일부가 사이드바에 걸림
+    const dx = r.right > right ? right - r.right : r.left < left ? Math.min(left - r.left, right - r.right) : 0;
+    const dy = r.top < top ? top - r.top : r.bottom > bottom ? bottom - r.bottom : 0;
+    if (!dx && !dy) return;
+    // 지도 중심을 반대로 옮기면 카드가 (dx, dy)만큼 움직임 (panBy는 애니메이션이라 화면이 가려져 있으면 안 움직여서 바로 이동)
+    const proj = map.getProjection();
+    const c = proj.containerPointFromCoords(map.getCenter());
+    map.setCenter(proj.coordsFromContainerPoint(new kakao.maps.Point(c.x - dx, c.y - dy)));
+  };
+
+  // 흡연구역 정보 카드: 이름, 주소, 형태(개방형 등) + [주소 복사] [출발] [도착]
+  const openZoneCard = (z) => {
     infoRef.current.close();
-    setSelectedId(z.id);
+    closeClickCard();
+    setSelectedId(z.id); // 사이드바 목록에서 선택 표시
+    // 서초구 자료처럼 주소 칸에 이름과 같은 위치 설명이 들어 있으면 주소 줄은 생략
+    const address = z.address && z.address !== z.name ? z.address : "";
+    showPlaceCard(
+      {
+        id: `zone-${z.id}`,
+        name: z.name,
+        group: "흡연구역",
+        categoryPath: "",
+        roadAddress: address,
+        jibunAddress: "",
+        address,
+        note: z.note ?? "",
+        zone: z, // [후기 보기] 버튼 (오른쪽 패널에 이 구역 정보와 후기)
+        phone: "",
+        lat: z.lat,
+        lng: z.lng,
+        onPin: true,
+      },
+      null
+    );
+  };
+
+  // 사이드바 목록에서 흡연구역을 고르면 그 핀 위에 정보 카드 (목록은 화면 안 구역이라 지도는 그대로)
+  const pickZone = (z) => {
+    openZoneCard(z);
     if (window.matchMedia("(max-width: 600px)").matches) setSidebarOpen(false);
   };
 
@@ -580,6 +656,13 @@ export default function App() {
     fetchZones();
     fetchFacilities();
   }, [kakao]);
+
+  // 후기 패널이 열리면 떠 있는 카드가 패널에 가려지지 않게 (패널이 미끄러져 들어온 뒤에 잼)
+  useEffect(() => {
+    if (!reviewZone || !user) return;
+    const t = setTimeout(() => clickCardRef.current && keepCardInView(clickCardRef.current.getContent()), 300);
+    return () => clearTimeout(t);
+  }, [reviewZone, user]);
 
   useEffect(() => {
     if (!mapRef.current) return;
@@ -666,7 +749,6 @@ export default function App() {
       </aside>
       {showNon && zoomLevel > AREA_MAX_LEVEL && <div className="hint">금연구역은 지도를 더 확대하면 보여요</div>}
       <div className="credit">경계선: © OpenStreetMap contributors</div>
-      {selectedId && <ZonePanel zoneId={selectedId} onClose={() => setSelectedId(null)} onRoutePick={pickRoutePoint} />}
       {rouletteOpen && <Roulette onClose={() => setRouletteOpen(false)} />}
       {/* 지도 위 금연 안내: 평소엔 오른쪽 아래 1개(닫기 가능), 흡연모드면 위쪽 띠 + 왼쪽 아래까지 더 띄움 */}
       {(!adClosed || smokingMode) && (
@@ -684,7 +766,19 @@ export default function App() {
           </div>
         </>
       )}
-      <LoginButton className="absolute top-3.5 right-3.5 z-10" /> {/* 임시: 위치는 팀과 정함 */}
+      {/* 후기 패널은 로그인한 동안에만 (로그아웃하면 닫힘) */}
+      {reviewZone && user && (
+        <ZonePanel zone={reviewZone} onClose={() => setReviewZone(null)} />
+      )}
+      <LoginButton className="absolute top-3.5 right-3.5 z-10" />
+      <LoginDialog
+        open={loginOpen}
+        onOpenChange={(open) => {
+          setLoginOpen(open);
+          if (!open) pendingReviewRef.current = null; // 로그인하지 않고 닫으면 후기 화면으로 넘어가지 않음
+        }}
+        onSuccess={onLoginSuccess}
+      /> {/* 임시: 위치는 팀과 정함 */}
       <div className={`fab-group ${menuOpen ? "open" : ""}`}>
         <button
           className="fab main"
