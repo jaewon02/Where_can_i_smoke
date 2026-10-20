@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from auth import LoginIn, SignupIn, current_user, hash_password, issue_token, revoke_token, verify_password
 from db import get_conn
+from reviews import LIST_LIMIT, REVIEW_SELECT, ReviewIn, check_target, find_author, reviews_conn
 
 load_dotenv()
 
@@ -369,3 +370,51 @@ def logout(user: dict = Depends(current_user)):
 @app.get("/api/auth/me", tags=["auth"])
 def me(user: dict = Depends(current_user)):
     return {"nickname": user["nickname"], "user_id": user["user_id"]}
+
+
+# ---------- 후기 (도우미 함수는 reviews.py) ----------
+@app.get("/api/reviews", tags=["reviews"])
+def list_reviews(target_type: str = Query(""), target_id: str = Query("")):
+    """대상(흡연구역 zone / 일반 장소 place)의 후기 목록, 최신순"""
+    try:
+        target_type, target_id = check_target(target_type, target_id)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    with reviews_conn(USERS_DB) as conn:
+        rows = conn.execute(
+            f"{REVIEW_SELECT} WHERE r.target_type = ? AND r.target_id = ? ORDER BY r.id DESC LIMIT ?",
+            (target_type, target_id, LIST_LIMIT),
+        )
+        return [dict(r) for r in rows]
+
+
+@app.post("/api/reviews", status_code=201, tags=["reviews"])
+def create_review(body: ReviewIn, user: dict = Depends(current_user)):
+    # 흡연구역은 zones.db에 있는 구역만. 일반 장소는 번호 모양만 확인 (ReviewIn)
+    if body.target_type == "zone":
+        with get_conn(ZONES_DB) as zconn:
+            if not zconn.execute("SELECT 1 FROM zones WHERE id = ?", (int(body.target_id),)).fetchone():
+                raise HTTPException(404, "흡연구역을 찾을 수 없습니다")
+    with reviews_conn(USERS_DB) as conn:
+        author_id = find_author(conn, user["user_id"])
+        cur = conn.execute(
+            "INSERT INTO reviews (target_type, target_id, author_id, rating, content) VALUES (?,?,?,?,?)",
+            (body.target_type, body.target_id, author_id, body.rating, body.content),
+        )
+        return dict(conn.execute(f"{REVIEW_SELECT} WHERE r.id = ?", (cur.lastrowid,)).fetchone())
+
+
+@app.delete("/api/reviews/{review_id}", tags=["reviews"])
+def delete_review(review_id: str, user: dict = Depends(current_user)):
+    """내가 쓴 후기만 지움"""
+    with reviews_conn(USERS_DB) as conn:
+        author_id = find_author(conn, user["user_id"])
+        row = None
+        if review_id.isascii() and review_id.isdigit():
+            row = conn.execute("SELECT author_id FROM reviews WHERE id = ?", (int(review_id),)).fetchone()
+        if not row:
+            raise HTTPException(404, "후기를 찾을 수 없습니다")
+        if row["author_id"] != author_id:
+            raise HTTPException(403, "내가 쓴 후기만 지울 수 있습니다")
+        conn.execute("DELETE FROM reviews WHERE id = ?", (int(review_id),))
+    return {"detail": "후기를 삭제했습니다"}

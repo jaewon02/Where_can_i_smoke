@@ -755,7 +755,14 @@ export default function App() {
       )}
       {/* 후기 패널은 로그인한 동안에만 (로그아웃하면 닫힘) */}
       {reviewZone && user && (
-        <ZonePanel zone={reviewZone} onClose={() => setReviewZone(null)} />
+        <ZonePanel
+          zone={reviewZone}
+          onClose={() => setReviewZone(null)}
+          onAuthExpired={() => {
+            pendingReviewRef.current = reviewZone; // 다시 로그인하면 이 패널을 이어서 엶
+            setLoginOpen(true);
+          }}
+        />
       )}
       <LoginButton className="absolute top-3.5 right-3.5 z-10" />
       <LoginDialog
