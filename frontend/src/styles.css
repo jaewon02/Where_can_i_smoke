@@ -371,29 +371,43 @@ body { margin: 0; font-family: system-ui, "Noto Sans KR", sans-serif; }
 .panel-od { margin-top: 12px; }
 .panel-od button { padding: 6px 16px; font-size: 13px; }
 
-/* 지도를 눌렀을 때 뜨는 [출발 | 도착] 카드 */
+/* 지도의 장소를 눌렀을 때 뜨는 장소 정보 카드 (카카오맵 장소 카드 모양) */
 .click-card {
-  position: relative; display: flex; flex-direction: column; gap: 3px; min-width: 190px; max-width: 260px;
-  margin-bottom: 14px; padding: 12px 14px; border-radius: 12px; background: #fff;
-  box-shadow: 0 4px 16px rgba(0,0,0,.25); font-size: 13px; text-align: left;
+  position: relative; display: flex; flex-direction: column; width: 300px; max-width: calc(100vw - 40px);
+  margin-bottom: 14px; padding: 16px 16px 14px; border-radius: 10px; background: #fff;
+  box-shadow: 0 4px 16px rgba(0,0,0,.25); font-size: 13px; text-align: left; color: #333; line-height: 1.45;
 }
 .click-card::after { /* 아래쪽 말풍선 꼬리 */
   content: ""; position: absolute; left: 50%; bottom: -7px; width: 14px; height: 14px;
   background: #fff; transform: translateX(-50%) rotate(45deg); box-shadow: 3px 3px 6px rgba(0,0,0,.08);
 }
-.cc-title { padding-right: 20px; font-size: 14px; font-weight: 700; color: #222; }
-.cc-addr { color: #777; font-size: 12px; }
-.cc-addr:empty { display: none; }
-.cc-od { align-self: flex-start; margin-top: 8px; }
+.cc-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; padding-right: 24px; }
+.cc-title { font-size: 17px; font-weight: 700; color: #111; word-break: keep-all; }
+.cc-cat { color: #999; font-size: 12px; }
+.click-card p { margin: 0; }
+.click-card .cc-addr { margin-top: 8px; color: #333; font-size: 13px; }
+.cc-sub { display: flex; flex-wrap: wrap; gap: 0 6px; color: #888; font-size: 12px; }
+.cc-phone { margin-top: 2px; color: #1f9d55; font-size: 13px; text-decoration: none; }
+.cc-phone:hover { text-decoration: underline; }
+.cc-addr:empty, .cc-cat:empty, .cc-sub span:empty, .cc-phone:empty { display: none; }
+.cc-actions { display: flex; gap: 6px; margin-top: 12px; }
+.cc-actions button {
+  height: 40px; border: 1px solid #ddd; border-radius: 4px; background: #fff;
+  font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap;
+}
+.cc-actions button:focus-visible { outline: 3px solid #90caf9; outline-offset: 2px; }
+.cc-copy { flex: none; width: 40px; display: grid; place-items: center; padding: 0; color: #555; }
+.cc-copy:hover { background: #f5f5f5; }
+.cc-copy.done { color: #1f9d55; }
+.cc-start { flex: 1; color: #333; }
+.cc-start:hover { background: #f5f5f5; }
+.cc-actions .cc-end { flex: 1; border-color: #3396ff; background: #3396ff; color: #fff; }
+.cc-actions .cc-end:hover { background: #1e7fe6; }
 .cc-close {
-  position: absolute; top: 6px; right: 6px; width: 24px; height: 24px; border: none; border-radius: 50%;
-  background: none; color: #999; font-size: 12px; cursor: pointer;
+  position: absolute; top: 10px; right: 10px; width: 28px; height: 28px; border: none; border-radius: 50%;
+  background: none; color: #666; font-size: 16px; cursor: pointer;
 }
 .cc-close:hover { background: #f2f2f2; }
-.cc-pin { /* 누른 지점 표시 */
-  position: absolute; left: 50%; bottom: -16px; z-index: 1; width: 10px; height: 10px; border-radius: 50%;
-  background: #1e88e5; border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,.4); transform: translate(-50%, 50%);
-}
 
 /* 길찾기 이동 수단 탭 + 대중교통 구간 */
 .route { overflow-y: auto; }
