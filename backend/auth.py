@@ -1,6 +1,6 @@
 """로그인 도우미: 비밀번호 해시, 로그인 표(token), 요청 모양 (라우트는 main.py)
 
-회원 정보는 zones.db의 users 표에, 표 목록은 서버 메모리에 보관합니다.
+회원 정보는 users.db의 users 표에, 표 목록은 서버 메모리에 보관합니다.
 표 목록은 메모리에만 있으므로 서버를 다시 켜면 모두 로그아웃됩니다.
 """
 import hashlib
@@ -55,7 +55,7 @@ def revoke_token(token: str) -> None:
 
 
 def current_user(cred: HTTPAuthorizationCredentials | None = Depends(bearer)) -> dict:
-    """Authorization: Bearer <표> 로 로그인한 사람을 찾음 (후기 쓰기 등에서도 사용 예정)"""
+    """Authorization: Bearer <표> 로 로그인한 사람을 찾음"""
     user = _tokens.get(cred.credentials) if cred else None
     if not user:
         raise HTTPException(401, "로그인이 필요합니다")

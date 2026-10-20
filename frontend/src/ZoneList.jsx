@@ -13,11 +13,11 @@ function distance(a, b) {
 const fmtDist = (m) => (m < 1000 ? `${Math.round(m / 10) * 10}m` : `${(m / 1000).toFixed(1)}km`);
 
 // 지금 지도 화면 안의 흡연구역 목록
-// 검색한 장소(origin)가 있으면 그곳에서 가까운 순, 없으면 별점 높은 순
+// 검색한 장소(origin)가 있으면 그곳에서 가까운 순
 export default function ZoneList({ zones, origin, selectedId, hidden, onPick, onRoutePick }) {
   const items = origin
     ? zones.map((z) => ({ ...z, dist: distance(origin, z) })).sort((a, b) => a.dist - b.dist)
-    : [...zones].sort((a, b) => (b.avg_rating ?? 0) - (a.avg_rating ?? 0) || b.review_count - a.review_count);
+    : zones;
 
   return (
     <section className="zone-list" aria-label="화면 안 흡연구역">
@@ -25,9 +25,7 @@ export default function ZoneList({ zones, origin, selectedId, hidden, onPick, on
         <h3>
           이 화면의 흡연구역 <b>{zones.length}</b>곳
         </h3>
-        {zones.length > (origin ? 0 : 1) && (
-          <small className="muted">{origin ? `'${origin.name}'에서 가까운 순` : "별점 높은 순"}</small>
-        )}
+        {origin && zones.length > 0 && <small className="muted">'{origin.name}'에서 가까운 순</small>}
       </header>
 
       {hidden && <p className="zl-msg">흡연구역 표시가 꺼져 있어요. 지도에는 안 보이지만 목록은 보여드려요.</p>}
@@ -42,17 +40,11 @@ export default function ZoneList({ zones, origin, selectedId, hidden, onPick, on
                 {z.dist != null && <span className="zl-dist">{fmtDist(z.dist)}</span>}
               </div>
               {z.address && <small className="zl-addr">{z.address}</small>}
-              <div className="zl-meta">
-                {z.avg_rating ? (
-                  <>
-                    <span className="zl-star">★ {z.avg_rating}</span>
-                    <span className="muted">후기 {z.review_count}</span>
-                  </>
-                ) : (
-                  <span className="muted">후기 없음</span>
-                )}
-                {z.note && <span className="muted zl-note">· {z.note}</span>}
-              </div>
+              {z.note && (
+                <div className="zl-meta">
+                  <span className="muted zl-note">{z.note}</span>
+                </div>
+              )}
             </button>
             <RouteButtons place={z} onPick={onRoutePick} className="zl-od" />
           </li>

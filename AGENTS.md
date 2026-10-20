@@ -1,6 +1,13 @@
 # AGENTS.md
 
-흡연자가 주변 흡연구역을 찾고, 후기·사진을 남겨 다른 흡연자와 공유하는 지도 웹앱 (메가존 부트캠프 팀 프로젝트).
+코드 생성 및 문서 작성시 다음 수칙/사항들을 준수할 것 
+
+## 주의 사항
+- `README.md` 수정 절대 금지
+- **AI 에이전트는 `README.md`를 절대로 수정·덮어쓰기·삭제·이동하지 않는다.**
+- 기능 추가, 리팩터링, 문서 정리 등 **어떤 작업을 하더라도** README를 "같이 업데이트"하지 않는다.
+- README 내용이 코드와 어긋나 보이면 고치지 말고, 응답에서 사람에게 **알리기만** 한다.
+- 유일한 예외: 사람이 그 요청에서 **`README.md` 수정을 명시적으로 직접 지시한 경우**. 추측·암시·"문서 전반 정리해줘" 같은 요청은 예외가 아니다.
 
 ## 기술 스택
 - 프론트엔드: React 18 + Vite, **JavaScript(.jsx)** — TypeScript로 바꾸지 않는다
@@ -13,13 +20,10 @@
 ## 구조
 ```
 backend/
-  main.py      # FastAPI 앱, 모든 /api 라우트
-  db.py        # get_conn(), init_db() — 스키마 정의와 마이그레이션(ALTER)
-  seed.py      # 초기 데이터 (data/ 파일 → DB: 시설·흡연구역·금연거리, 예전 과천 샘플 정리)
-  sync.py      # 공공데이터 API → zones 동기화
-  uploads/     # 후기 사진 저장소 (git 제외)
-frontend/src/
-  App.jsx, ZonePanel.jsx, facilities.js, useKakaoMap.js
+  data/
+
+frontend/
+  src/
 ```
 
 ## 실행
@@ -27,7 +31,6 @@ frontend/src/
 # 백엔드 (포트 8001)
 cd backend
 uv sync
-uv run python seed.py                  # 초기 데이터 (최초 1회)
 uv run uvicorn main:app --reload --port 8001
 
 # 프런트엔드 (포트 5173, /api 는 8001로 프록시)
