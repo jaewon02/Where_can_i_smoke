@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Loader2Icon } from "lucide-react";
+import { EyeIcon, EyeOffIcon, Loader2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -24,6 +24,8 @@ function AuthForm({ mode, pending, setPending, onSuccess }) {
   const fields = FIELDS[mode];
   const [form, setForm] = useState(() => Object.fromEntries(fields.map((f) => [f.name, ""])));
   const [error, setError] = useState("");
+  // 비밀번호 보기 여부. 탭을 바꾸거나 창을 닫으면 이 양식이 사라지므로 다시 숨김(false)으로 시작함
+  const [showPassword, setShowPassword] = useState(false);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -43,21 +45,41 @@ function AuthForm({ mode, pending, setPending, onSuccess }) {
 
   return (
     <form onSubmit={submit} className="grid gap-3 pt-2">
-      {fields.map((f) => (
-        <div key={f.name} className="grid gap-1.5">
-          <Label htmlFor={`${mode}-${f.name}`}>{f.label}</Label>
-          <Input
-            id={`${mode}-${f.name}`}
-            type={f.type ?? "text"}
-            autoComplete={f.autoComplete}
-            required
-            disabled={pending}
-            value={form[f.name]}
-            onChange={(e) => setForm((v) => ({ ...v, [f.name]: e.target.value }))}
-          />
-          {f.hint && <p className="text-xs text-muted-foreground">{f.hint}</p>}
-        </div>
-      ))}
+      {fields.map((f) => {
+        const isPassword = f.type === "password";
+        return (
+          <div key={f.name} className="grid gap-1.5">
+            <Label htmlFor={`${mode}-${f.name}`}>{f.label}</Label>
+            <div className="relative">
+              <Input
+                id={`${mode}-${f.name}`}
+                type={isPassword && showPassword ? "text" : (f.type ?? "text")}
+                autoComplete={f.autoComplete}
+                required
+                disabled={pending}
+                value={form[f.name]}
+                onChange={(e) => setForm((v) => ({ ...v, [f.name]: e.target.value }))}
+                className={isPassword ? "pr-9" : undefined}
+              />
+              {/* type="button"이라 눌러도 양식이 제출되지 않음 */}
+              {isPassword && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="absolute top-1/2 right-0.5 -translate-y-1/2 text-muted-foreground"
+                  disabled={pending}
+                  aria-label={showPassword ? "비밀번호 숨기기" : "비밀번호 보기"}
+                  onClick={() => setShowPassword((v) => !v)}
+                >
+                  {showPassword ? <EyeOffIcon /> : <EyeIcon />}
+                </Button>
+              )}
+            </div>
+            {f.hint && <p className="text-xs text-muted-foreground">{f.hint}</p>}
+          </div>
+        );
+      })}
       {error && (
         <p role="alert" className="whitespace-pre-line rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {error}
