@@ -37,7 +37,18 @@ function extentM(f) {
   return Math.max((x1 - x0) * 111320 * Math.cos((y0 * Math.PI) / 180), (y1 - y0) * 111320);
 }
 
+// 내 위치 시작점: 항상 강남역 (앱을 켜면 이 자리에 내 위치 마커가 뜨고, 마우스로 끌어 옮길 수 있음). 지도 첫 화면 중심도 여기
+const START_GPS = { lat: 37.49799161931449, lng: 127.02770445495885 };
+
 const svgUri = (svg) => "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+
+// 내 위치 마커: 흰 테두리 파란 점 + 연한 파란 테두리
+function myLocImage(kakao) {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 34 34">
+    <circle cx="17" cy="17" r="14" fill="#1e88e5" fill-opacity=".22"/>
+    <circle cx="17" cy="17" r="8.5" fill="#1e88e5" stroke="#fff" stroke-width="3"/></svg>`;
+  return new kakao.maps.MarkerImage(svgUri(svg), new kakao.maps.Size(34, 34), { offset: new kakao.maps.Point(17, 17) });
+}
 
 // 담배 그림 (흰색). 필터부분은 반투명
 const CIGARETTE = `
@@ -105,7 +116,10 @@ export default function App() {
   const searchMarkerRef = useRef(null); // 검색으로 고른 위치 표시
   const searchedPlaceRef = useRef(null); // 검색으로 고른 장소 (목록 거리 기준)
   const routeOverlaysRef = useRef([]); // 길찾기 경로 선
-  const myLocRef = useRef(null); // 내 위치 파란 점
+  const myLocRef = useRef(null); // 내 위치 파란 점 마커
+  const [gpsDrag, setGpsDrag] = useState(true); // 내 위치 마커를 마우스로 끌어 옮길 수 있는지 (지도 위 [위치 이동] 버튼)
+  const gpsDragRef = useRef(gpsDrag);
+  gpsDragRef.current = gpsDrag;
   const clickCardRef = useRef(null); // 지도의 장소를 눌렀을 때 뜨는 장소 정보 카드
   const clickReqRef = useRef(0);
 
@@ -319,35 +333,53 @@ export default function App() {
     setListOrigin(null);
   };
 
-  // 브라우저 위치 권한으로 내 위치를 받아 파란 점으로 표시 (보던 지도 화면은 옮기지 않음)
+  // 내 위치 = 파란 점 마커. 브라우저 GPS는 쓰지 않고 항상 강남역(START_GPS)에서 시작하며,
+  // 마우스로 끌어서 놓은 자리가 내 위치가 됨 (새로고침하면 다시 강남역)
   const locate = () => {
-    if (!navigator.geolocation) {
-      return setMyPos({ status: "error", message: "이 브라우저는 위치 확인을 지원하지 않아요." });
+    // 이미 있으면 끌어 옮긴 자리를 그대로 씀. 단, 지도가 새로 만들어졌으면(개발 중 화면 갱신 등) 새 지도에 다시 붙임
+    if (myLocRef.current) {
+      if (myLocRef.current.getMap() !== mapRef.current) myLocRef.current.setMap(mapRef.current);
+      return;
     }
-    setMyPos((p) => ({ ...p, status: "loading" }));
-    navigator.geolocation.getCurrentPosition(
-      ({ coords }) => {
-        const { latitude: lat, longitude: lng } = coords;
-        setMyPos({ status: "ok", lat, lng });
-        const map = mapRef.current;
-        const pos = new kakao.maps.LatLng(lat, lng);
-        myLocRef.current?.setMap(null);
-        const dot = document.createElement("div");
-        dot.className = "my-loc";
-        dot.title = "내 위치";
-        myLocRef.current = new kakao.maps.CustomOverlay({ map, position: pos, content: dot, zIndex: 4 });
-      },
-      (err) =>
-        setMyPos({
-          status: "error",
-          message:
-            err.code === err.PERMISSION_DENIED
-              ? "위치 권한이 거부됐어요. 주소창에서 위치 권한을 허용하거나, 검색한 장소에서 출발해 보세요."
-              : "내 위치를 확인하지 못했어요.",
-        }),
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
-    );
+    setMyPos({ status: "ok", ...START_GPS });
+    const marker = new kakao.maps.Marker({
+      map: mapRef.current,
+      position: new kakao.maps.LatLng(START_GPS.lat, START_GPS.lng),
+      image: myLocImage(kakao),
+      draggable: gpsDragRef.current,
+      clickable: true, // 눌러도 지도 클릭(장소 카드)으로 넘어가지 않게
+      zIndex: 4,
+      title: gpsDragRef.current ? "내 위치 (끌어서 옮길 수 있어요)" : "내 위치",
+    });
+    // 끌어서 놓으면 그 자리를 내 위치로 (길찾기 출발지가 '내 위치'면 경로도 다시 찾음)
+    kakao.maps.event.addListener(marker, "dragend", () => {
+      const p = marker.getPosition();
+      setMyPos({ status: "ok", lat: p.getLat(), lng: p.getLng() });
+    });
+    myLocRef.current = marker;
   };
+
+  // [내 위치로] 버튼: 지도를 내 위치 마커(끌어 옮겼으면 옮긴 자리)로 이동
+  // 왼쪽 사이드바가 지도를 덮고 있으면 그만큼 비켜서, 보이는 영역의 가운데에 마커가 오게 함
+  const goToMyPos = () => {
+    const map = mapRef.current;
+    if (!map) return;
+    locate(); // 마커가 없거나 예전 지도에 붙어 있으면 다시 띄움
+    const box = document.getElementById("map").getBoundingClientRect();
+    const sidebar = document.querySelector(".sidebar.open")?.getBoundingClientRect();
+    const covered = sidebar && sidebar.right < box.right - 200 ? sidebar.right - box.left : 0; // 좁은 화면에선 무시
+    const proj = map.getProjection();
+    const p = proj.containerPointFromCoords(myLocRef.current.getPosition());
+    map.panTo(proj.coordsFromContainerPoint(new kakao.maps.Point(p.x - covered / 2, p.y)));
+  };
+
+  // [위치 이동] 버튼으로 내 위치 마커 끌기를 켜고 끔
+  useEffect(() => {
+    const marker = myLocRef.current;
+    if (!marker) return;
+    marker.setDraggable(gpsDrag);
+    marker.setTitle(gpsDrag ? "내 위치 (끌어서 옮길 수 있어요)" : "내 위치");
+  }, [gpsDrag]);
 
   const clearRoute = () => {
     routeOverlaysRef.current.forEach((o) => o.setMap(null));
@@ -634,10 +666,11 @@ export default function App() {
   useEffect(() => {
     if (!kakao) return;
     const map = new kakao.maps.Map(document.getElementById("map"), {
-      center: new kakao.maps.LatLng(37.49799161931449, 127.02770445495885), // 강남역
+      center: new kakao.maps.LatLng(START_GPS.lat, START_GPS.lng), // 강남역 (내 위치 시작점)
       level: 3,
     });
     mapRef.current = map;
+    locate(); // 처음부터 강남역에 내 위치 마커를 띄워 둠
     infoRef.current = new kakao.maps.InfoWindow({ removable: true });
     kakao.maps.event.addListener(map, "click", (e) => openClickCard(e.latLng));
     let timer;
@@ -772,6 +805,14 @@ export default function App() {
         />
       )}
       <LoginButton className="absolute top-3.5 right-3.5 z-10" />
+      {/* 로그인 버튼 아래: 지도를 내 위치로 이동 */}
+      <button type="button" className="my-pos-btn" onClick={goToMyPos} title="내 위치로 이동" aria-label="내 위치로 이동">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="6.5" />
+          <circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none" />
+          <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+        </svg>
+      </button>
       <LoginDialog
         open={loginOpen}
         onOpenChange={(open) => {
@@ -781,6 +822,21 @@ export default function App() {
         onSuccess={onLoginSuccess}
       /> {/* 임시: 위치는 팀과 정함 */}
       <SmokeModeSlider on={showSmoking} onChange={setShowSmoking} />
+      {/* 내 위치 마커 끌기 켜기/끄기: 지도 왼쪽 아래 구석의 작은 슬라이더 */}
+      <button
+        type="button"
+        className={`gps-drag-toggle ${gpsDrag ? "on" : ""}`}
+        role="switch"
+        aria-checked={gpsDrag}
+        aria-label="내 위치 마커 이동"
+        title={gpsDrag ? "내 위치 마커를 끌어서 옮길 수 있어요. 누르면 고정" : "내 위치 마커가 고정돼 있어요. 누르면 끌어서 옮길 수 있음"}
+        onClick={() => setGpsDrag((v) => !v)}
+      >
+        <span className="gps-drag-track" aria-hidden="true">
+          <span className="gps-drag-knob" />
+        </span>
+        위치 이동
+      </button>
     </div>
   );
 }
