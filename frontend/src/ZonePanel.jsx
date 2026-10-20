@@ -1,10 +1,13 @@
 import { useEffect, useRef } from "react";
+import LoginButton from "./LoginButton.jsx";
 import ReviewSection from "./ReviewSection.jsx";
+import { useAuth } from "./auth.js";
 
 const TYPE_LABEL = { smoking: "흡연구역", nonsmoking: "비흡연구역" };
 
-// 오른쪽 후기 패널 (후기 보기). 흡연구역 또는 일반 장소(type: "place", label: 종류). 후기는 서버에서 불러옴
+// 오른쪽 후기 패널 (후기 보기). 흡연구역 또는 일반 장소(type: "place", label: 종류)의 정보를 보여주고, 후기는 로그인한 사람에게만 보여줌
 export default function ZonePanel({ zone, onClose, onAuthExpired }) {
+  const { user } = useAuth(); // 패널이 열릴 때 서버에 로그인 상태를 다시 확인
   const closeRef = useRef(null);
 
   useEffect(() => {
@@ -33,6 +36,7 @@ export default function ZonePanel({ zone, onClose, onAuthExpired }) {
           {zone.note && <p className="note">{zone.note}</p>}
           {zone.radius_m && <p className="note">금연 반경 약 {zone.radius_m}m</p>}
         </header>
+
         <ReviewSection
           key={`${zone.type === "place" ? "place" : "zone"}:${zone.id}`}
           targetType={zone.type === "place" ? "place" : "zone"}
