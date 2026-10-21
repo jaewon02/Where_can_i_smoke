@@ -1,5 +1,6 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import RouteButtons from "./RouteButtons.jsx";
+import { toPlace } from "./nearbyPlaces.js";
 
 // 키워드로 장소를 찾고, 없으면 주소로 한 번 더 찾음 (최대 15건)
 export function searchPlaces(kakao, query, center) {
@@ -10,13 +11,10 @@ export function searchPlaces(kakao, query, center) {
       (data, status) => {
         if (status === services.Status.OK) {
           return resolve(
+            // 지도에서 장소를 누를 때와 같은 모양으로 (고르면 같은 장소 카드를 띄움)
             data.map((p) => ({
-              id: p.id,
-              name: p.place_name,
-              address: p.road_address_name || p.address_name,
+              ...toPlace(p),
               category: p.category_name?.split(" > ").pop() ?? "",
-              lat: Number(p.y),
-              lng: Number(p.x),
             }))
           );
         }
@@ -39,13 +37,13 @@ export function searchPlaces(kakao, query, center) {
   });
 }
 
+// chosen: 지도에 카드가 떠 있는 결과 (목록에서든 핀에서든 고를 때마다 새 객체라 같은 걸 다시 골라도 강조됨)
 // children: 검색 결과 목록이 접혀 있을 때 그 아래에 보여줄 내용 (화면 안 흡연구역 목록)
-export default function SearchBox({ kakao, getCenter, onSelect, onClear, onRoutePick, children }) {
+export default function SearchBox({ kakao, getCenter, chosen, onSelect, onResults, onClear, onRoutePick, children }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState(null); // null이면 목록 닫힘
   const [active, setActive] = useState(-1);
   const [loading, setLoading] = useState(false);
-  const [chosen, setChosen] = useState(null); // 지도에 표시 중인 결과 id
   const [expanded, setExpanded] = useState(false); // 검색 결과 목록 펼침
   const reqRef = useRef(0);
 
@@ -59,23 +57,26 @@ export default function SearchBox({ kakao, getCenter, onSelect, onClear, onRoute
     if (reqId !== reqRef.current) return; // 더 최근 검색이 있으면 버림
     setLoading(false);
     setResults(found);
+    onResults(found);
     setExpanded(true);
-    setChosen(null);
     setActive(found.length ? 0 : -1);
   };
 
-  // 고르면 결과 목록은 접고(다시 펼칠 수 있음) 그 주변 흡연구역 목록을 보여줌
-  const choose = (r) => {
-    setChosen(r.id);
-    setExpanded(false);
-    onSelect(r);
-  };
+  // 골라도 결과 목록은 그대로 둠 (다른 후보를 바로 고를 수 있게. 흡연구역 목록은 [접기]로 봄)
+  const choose = (r) => onSelect(r);
+
+  // 지도 핀을 눌러 고르면 목록에서 그 결과를 마우스를 올린 것처럼 칠하고 보이게 스크롤
+  useEffect(() => {
+    const i = results?.findIndex((r) => r.id === chosen?.id) ?? -1;
+    if (i < 0) return;
+    setActive(i);
+    document.getElementById(`search-r-${i}`)?.scrollIntoView({ block: "nearest" });
+  }, [chosen]);
 
   const clear = () => {
     reqRef.current++;
     setQuery("");
     setResults(null);
-    setChosen(null);
     setLoading(false);
     onClear();
   };
@@ -105,6 +106,7 @@ export default function SearchBox({ kakao, getCenter, onSelect, onClear, onRoute
           onChange={(e) => {
             setQuery(e.target.value);
             setResults(null);
+            if (results) onResults([]); // 목록이 사라지면 지도의 결과 핀도 지움
           }}
           onKeyDown={onKeyDown}
           placeholder="장소, 주소 검색"
@@ -143,7 +145,7 @@ export default function SearchBox({ kakao, getCenter, onSelect, onClear, onRoute
               id={`search-r-${i}`}
               role="option"
               aria-selected={i === active}
-              className={`${i === active ? "active" : ""} ${r.id === chosen ? "chosen" : ""}`}
+              className={`${i === active ? "active" : ""} ${r.id === chosen?.id ? "chosen" : ""}`}
               onPointerEnter={() => setActive(i)}
               onClick={() => choose(r)}
             >

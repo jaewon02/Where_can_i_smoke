@@ -121,7 +121,8 @@ export default function App() {
   const areasKeyRef = useRef("");
   const facilityReqRef = useRef(0);
   const infoRef = useRef(null);
-  const searchMarkerRef = useRef(null); // 검색으로 고른 위치 표시
+  const searchCardRef = useRef(null); // 검색으로 고른 장소의 카드
+  const searchMarkersRef = useRef([]); // 검색 결과 핀들
   const searchedPlaceRef = useRef(null); // 검색으로 고른 장소 (목록 거리 기준)
   const routeOverlaysRef = useRef([]); // 길찾기 경로 선
   const myLocRef = useRef(null); // 내 위치 파란 점 마커
@@ -323,19 +324,37 @@ export default function App() {
     const pos = new kakao.maps.LatLng(place.lat, place.lng);
     infoRef.current.close();
     closeClickCard();
-    searchMarkerRef.current?.setMap(null);
-    searchMarkerRef.current = new kakao.maps.Marker({ map, position: pos, title: place.name, zIndex: 2 });
     searchedPlaceRef.current = place;
-    setSearchedPlace(place);
+    setSearchedPlace({ ...place }); // 같은 장소를 다시 골라도 목록 강조가 다시 되도록 매번 새 객체
     map.setLevel(3);
     map.setCenter(pos);
     // 좁은 화면에선 사이드바가 지도를 거의 가리므로 고르면 접음
     if (window.matchMedia("(max-width: 600px)").matches) setSidebarOpen(false);
+    // 지도에서 장소를 누를 때와 같은 장소 카드 ([후기 보기] 포함). 결과 핀을 가리지 않게 핀 위에 띄움
+    showPlaceCard({ ...place, onPin: true }, null);
+    searchCardRef.current = clickCardRef.current;
+  };
+
+  // 검색 결과마다 지도에 카카오 기본(파란) 핀. 핀을 누르면 목록에서 고른 것과 같음
+  const showSearchMarkers = (places) => {
+    searchMarkersRef.current.forEach((m) => m.setMap(null));
+    searchMarkersRef.current = places.map((p) => {
+      const marker = new kakao.maps.Marker({
+        map: mapRef.current,
+        position: new kakao.maps.LatLng(p.lat, p.lng),
+        title: p.name,
+        clickable: true, // 눌러도 지도 클릭(장소 카드)으로 넘어가지 않게
+        zIndex: 2,
+      });
+      kakao.maps.event.addListener(marker, "click", () => goToPlace(p));
+      return marker;
+    });
   };
 
   const clearSearch = () => {
-    searchMarkerRef.current?.setMap(null);
-    searchMarkerRef.current = null;
+    showSearchMarkers([]);
+    if (searchCardRef.current && searchCardRef.current === clickCardRef.current) closeClickCard(); // 다른 카드가 떠 있으면 그대로 둠
+    searchCardRef.current = null;
     searchedPlaceRef.current = null;
     setSearchedPlace(null);
     setListOrigin(null);
@@ -466,18 +485,18 @@ export default function App() {
     const segLines = (segments ?? [])
       .filter((s) => s.path.length > 1)
       .map((s) => line(s.path.map(ll), s.type === "WALKING", SEG_COLOR[s.type] ?? "#1e88e5"));
-    // 출발/도착 표시 (내 위치에서 출발하면 파란 점이 이미 있으므로 출발 표시는 생략)
+    // 출발/도착 표시
     const pin = (pos, kind, label) => {
       const el = document.createElement("div");
       el.className = `route-pin ${kind}`;
       el.textContent = label;
-      return new kakao.maps.CustomOverlay({ map, position: pos, content: el, yAnchor: 1.3, zIndex: 5 });
+      return new kakao.maps.CustomOverlay({ map, position: pos, content: el, yAnchor: 1, zIndex: 5 });
     };
     routeOverlaysRef.current = [
       ...(pts.length
         ? [...(segLines.length ? segLines : [line(pts)]), line([startPt, pts[0]], true), line([pts[pts.length - 1], endPt], true)]
         : [line([startPt, endPt], true)]),
-      ...(start.isMe ? [] : [pin(startPt, "start", "출발")]),
+      pin(startPt, "start", "출발"),
       pin(endPt, "end", "도착"),
       ...(via ? [pin(ll([via.lat, via.lng]), "via", "흡연")] : []),
     ];
@@ -871,7 +890,9 @@ export default function App() {
           <SearchBox
             kakao={kakao}
             getCenter={() => mapRef.current?.getCenter()}
+            chosen={searchedPlace}
             onSelect={goToPlace}
+            onResults={showSearchMarkers}
             onClear={clearSearch}
             onRoutePick={pickRoutePoint}
           >
