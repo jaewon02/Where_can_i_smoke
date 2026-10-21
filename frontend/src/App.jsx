@@ -562,7 +562,13 @@ export default function App() {
         if (reqId !== clickReqRef.current) return; // 그새 다른 곳을 눌렀으면 무시
         const place = rank(places)[0];
         if (!place) return; // 길거리, 단지 안 길, 공터 등 장소 이름이 없는 곳
-        if (place.groupCode !== "BUS") return showPlaceCard(place, building);
+        if (place.groupCode !== "BUS") {
+          // 같은 주소(한 건물)에 가게가 여럿이면 목록 카드를 띄워 스크롤로 고르게 함
+          const key = place.roadAddress || place.jibunAddress;
+          const same = key ? places.filter((p) => p.groupCode !== "BUS" && (p.roadAddress || p.jibunAddress) === key) : [];
+          if (same.length > 1) return showBuildingList(place, same, building);
+          return showPlaceCard(place, building);
+        }
         // 버스정류장은 주소가 없어서 정류장 위치의 주소를 찾아 넣음
         new kakao.maps.services.Geocoder().coord2Address(place.lng, place.lat, (res, status) => {
           if (reqId !== clickReqRef.current) return;
@@ -574,13 +580,85 @@ export default function App() {
       });
   };
 
+  // 분류 경로의 마지막 단계 (이름과 같으면 그 앞 단계). 예: '음식점 > 한식 > 국밥' -> '국밥'
+  const placeCat = (place) => {
+    const path = place.categoryPath ? place.categoryPath.split(" > ") : [place.group];
+    let cat = path.pop() || "";
+    if (cat && place.name.startsWith(cat) && path.length) cat = path.pop();
+    return cat;
+  };
+
+  // 카드 안을 누르거나 스크롤할 때 지도 클릭·확대로 다시 처리되지 않도록 막음
+  const stopMapEvents = (el) =>
+    ["mousedown", "touchstart", "touchmove", "click", "dblclick", "wheel"].forEach((t) =>
+      el.addEventListener(t, (e) => e.stopPropagation())
+    );
+
+  // 같은 주소(한 건물)에 있는 가게 목록 카드: 건물 이름·주소 + 스크롤되는 가게 목록
+  // 가게를 누르면 그 가게의 정보 카드로 바뀌고, 정보 카드의 [← 목록]으로 다시 돌아옴
+  const showBuildingList = (clicked, places, building) => {
+    closeClickCard();
+    const key = clicked.roadAddress || clicked.jibunAddress;
+    // 건물 이름: 목록 안에 건물 자체인 장소(빌딩·오피스텔·상가·아파트)가 있으면 그 이름, 없으면 누른 지점의 건물 이름
+    const isBuilding = (p) => /^부동산 > .*(빌딩|오피스텔|상가|아파트|주상복합)/.test(p.categoryPath || "");
+    const buildingPlace = isBuilding(clicked) ? clicked : places.find(isBuilding);
+    const title = buildingPlace?.name || (building?.roadAddress === key && building.name) || "이 건물의 장소";
+    // 누른 가게를 맨 위에, 나머지는 이름순. 건물 이름으로 쓴 장소는 제목에 있으니 목록에서 뺌
+    const list = [clicked, ...places.filter((p) => p.id !== clicked.id).sort((a, b) => a.name.localeCompare(b.name, "ko"))].filter(
+      (p) => p !== buildingPlace
+    );
+    const el = document.createElement("div");
+    el.className = "click-card bl-card";
+    el.innerHTML = `
+      <button class="cc-close" aria-label="닫기">✕</button>
+      <div class="cc-head"><b class="cc-title"></b><span class="cc-cat"></span></div>
+      <p class="cc-addr"></p>
+      <button type="button" class="cc-reviews">후기 보기</button>
+      <ul class="bl-list"></ul>`;
+    const q = (s) => el.querySelector(s);
+    stopMapEvents(el);
+    q(".cc-close").onclick = closeClickCard;
+    q(".cc-title").textContent = title;
+    q(".cc-cat").textContent = `${list.length}곳`;
+    q(".cc-addr").textContent = key;
+    // 건물 후기: 도로명주소로 묶어서, 같은 건물이면 어느 가게를 눌러 들어와도 같은 후기 목록 (번호는 처음 누른 장소, 기록용)
+    const reviewTarget = { id: clicked.id, type: "building", label: "건물", name: title, address: key, note: `${list.length}곳` };
+    q(".cc-reviews").onclick = () => requireLogin().then((user) => user && setReviewZone(reviewTarget));
+    const ul = q(".bl-list");
+    for (const p of list) {
+      const li = document.createElement("li");
+      li.innerHTML = `<button type="button" class="bl-item"><b></b><span class="bl-cat"></span><small></small></button>`;
+      li.querySelector("b").textContent = p.name;
+      li.querySelector(".bl-cat").textContent = placeCat(p);
+      li.querySelector("small").textContent = p.phone;
+      if (p.id === clicked.id) li.firstChild.classList.add("picked");
+      li.firstChild.onclick = () => {
+        closeClickCard();
+        showPlaceCard(p, building, () => showBuildingList(clicked, places, building));
+      };
+      ul.appendChild(li);
+    }
+
+    clickCardRef.current = new kakao.maps.CustomOverlay({
+      map: mapRef.current,
+      position: new kakao.maps.LatLng(clicked.lat, clicked.lng),
+      content: el,
+      yAnchor: 1,
+      zIndex: 6,
+      clickable: true,
+    });
+    keepCardInView(el);
+  };
+
   // 장소 정보 카드 (카카오맵 장소 카드 모양): 이름·종류, 주소, (우)우편번호 (지번), 전화
   // 아래 버튼: [주소 복사] [출발] [도착] (출발/도착은 이 장소를 길찾기 출발지/도착지로)
-  const showPlaceCard = (place, building) => {
+  // onBack 이 있으면(건물 목록에서 고른 가게) 위쪽에 [← 목록] 버튼을 둠
+  const showPlaceCard = (place, building, onBack) => {
     const el = document.createElement("div");
     el.className = "click-card";
     el.innerHTML = `
       <button class="cc-close" aria-label="닫기">✕</button>
+      <button type="button" class="cc-back" hidden>← 목록</button>
       <div class="cc-head"><b class="cc-title"></b><span class="cc-cat"></span></div>
       <p class="cc-addr"></p>
       <p class="cc-sub"><span class="cc-zip"></span><span class="cc-jibun"></span></p>
@@ -595,9 +673,12 @@ export default function App() {
         <button type="button" class="cc-end">도착</button>
       </div>`;
     const q = (s) => el.querySelector(s);
-    // 카드 안을 누를 때 지도 클릭으로 다시 처리되지 않도록 막음
-    ["mousedown", "touchstart", "click", "dblclick"].forEach((t) => el.addEventListener(t, (e) => e.stopPropagation()));
+    stopMapEvents(el);
     q(".cc-close").onclick = closeClickCard;
+    if (onBack) {
+      q(".cc-back").hidden = false;
+      q(".cc-back").onclick = onBack;
+    }
     q(".cc-start").onclick = () => {
       pickRoutePoint("start", place);
       closeClickCard();
@@ -608,10 +689,7 @@ export default function App() {
     };
 
     q(".cc-title").textContent = place.name;
-    // 분류 경로의 마지막 단계 (이름과 같으면 그 앞 단계). 예: '음식점 > 한식 > 국밥' -> '국밥'
-    const path = place.categoryPath ? place.categoryPath.split(" > ") : [place.group];
-    let cat = path.pop() || "";
-    if (cat && place.name.startsWith(cat) && path.length) cat = path.pop();
+    const cat = placeCat(place);
     q(".cc-cat").textContent = cat;
     const road = place.roadAddress || place.address || "";
     q(".cc-addr").textContent = road || place.jibunAddress;
@@ -645,6 +723,7 @@ export default function App() {
       note: place.phone ? `☎ ${place.phone}` : "",
     };
     q(".cc-reviews").onclick = () => requireLogin().then((user) => user && setReviewZone(reviewTarget));
+    if (onBack) q(".cc-reviews").remove(); // 건물 목록에서 연 가게는 후기를 건물 목록 카드에서 봄
     if (place.onPin) el.classList.add("cc-on-pin"); // 핀 마커 위에 띄울 때는 핀을 가리지 않게 더 위로
     const phone = q(".cc-phone");
     phone.textContent = place.phone;
