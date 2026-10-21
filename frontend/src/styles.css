@@ -327,24 +327,11 @@ body { margin: 0; font-family: system-ui, "Noto Sans KR", sans-serif; }
   background: none; color: #9a4a4c; font-size: 12px; cursor: pointer;
 }
 .qa-close:hover { background: rgba(0,0,0,.06); }
-.quit-ad.float { width: 300px; box-shadow: 0 4px 16px rgba(0,0,0,.18); }
-.quit-ad.strip { align-items: center; padding: 9px 14px; box-shadow: 0 2px 10px rgba(0,0,0,.18); }
-.quit-ad.strip .qa-text { flex-direction: row; flex-wrap: wrap; gap: 4px 8px; }
 .quit-ad.inline { margin-top: 10px; padding: 9px 12px; }
 .quit-ad.inline .qa-text, .quit-ad.inline .qa-text b { font-size: 12px; }
 
 .sidebar-ad { padding: 10px 14px 14px; border-top: 1px solid #eee; flex: none; }
 .route-ads { display: flex; flex-direction: column; gap: 8px; margin-top: auto; padding: 10px 14px 14px; flex: none; }
-.map-ad { position: absolute; z-index: 12; max-width: calc(100vw - 28px); }
-.map-ad.right { right: 14px; bottom: 28px; }
-.map-ad.left { left: 14px; bottom: 28px; transition: left .25s ease; }
-.app.sidebar-open .map-ad.left { left: calc(var(--sidebar-w) + 14px); }
-.map-ad.top { top: 96px; right: 14px; max-width: min(560px, calc(100vw - 28px)); }
-@media (max-width: 900px) {
-  .map-ad.left { display: none; } /* 좁은 화면에선 오른쪽 아래 카드와 겹치므로 생략 */
-  .app.sidebar-open .map-ad.top { display: none; }
-}
-@media (max-width: 600px) { .quit-ad.float { width: auto; } }
 
 /* 장소 옆 [출발 | 도착] 버튼 */
 .od-btns {

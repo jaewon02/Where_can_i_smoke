@@ -767,20 +767,6 @@ export default function App() {
       {SHOW_NONSMOKING_AREAS && showNon && zoomLevel > AREA_MAX_LEVEL && <div className="hint">금연구역은 지도를 더 확대하면 보여요</div>}
       <div className="credit">경계선: © OpenStreetMap contributors</div>
       {rouletteOpen && showSmoking && <Roulette onClose={() => setRouletteOpen(false)} />}
-      {/* 지도 위 금연 안내: 흡연모드를 켰을 때만 오른쪽 아래, 위쪽 띠, 왼쪽 아래에 띄움 */}
-      {showSmoking && (
-        <>
-          <div className="map-ad right">
-            <QuitAd slot={5} variant="float" />
-          </div>
-          <div className="map-ad top">
-            <QuitAd slot={3} variant="strip" />
-          </div>
-          <div className="map-ad left">
-            <QuitAd slot={4} variant="float" />
-          </div>
-        </>
-      )}
 
       {/* 후기 패널은 로그인한 동안에만 (로그아웃하면 닫힘) */}
       {reviewZone && user && (
