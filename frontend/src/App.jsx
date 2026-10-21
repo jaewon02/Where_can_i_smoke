@@ -325,7 +325,7 @@ export default function App() {
       .filter((p) => p.lat != null)
       .map((p) => {
         const marker = new kakao.maps.Marker({
-          map: mapRef.current,
+          map: flagsRef.current.showSmoking ? mapRef.current : null, // 흡연모드가 꺼져 있으면 후기 핀은 숨김
           position: new kakao.maps.LatLng(p.lat, p.lng),
           title: `${p.address} (★ ${p.rating} · 후기 ${p.count}개)`,
           image,
@@ -920,6 +920,8 @@ export default function App() {
     infoRef.current.close();
     drawZones();
     fetchFacilities();
+    // 후기가 있는 장소 핀도 흡연모드일 때만
+    reviewMarkersRef.current.forEach((m) => m.setMap(showSmoking ? mapRef.current : null));
   }, [showSmoking, showNon]);
 
   if (error) return <div className="error">{error.message}</div>;
@@ -982,7 +984,7 @@ export default function App() {
               hidden={!showSmoking}
               onPick={pickZone}
               onRoutePick={pickRoutePoint}
-              reviewed={visibleReviewed}
+              reviewed={visibleReviewed} // 목록은 흡연모드와 상관없이 보여줌 (지도의 후기 핀만 흡연모드일 때)
               // 목록은 누를 때마다 열기/닫기 (이미 그 주소의 후기 패널이 열려 있으면 닫음)
               openAddress={reviewZone?.type === "building" && user ? reviewZone.address : null}
               onPickReviewed={(p) =>
