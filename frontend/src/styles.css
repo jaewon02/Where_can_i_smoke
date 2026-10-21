@@ -498,3 +498,21 @@ body { margin: 0; font-family: system-ui, "Noto Sans KR", sans-serif; }
 .my-pos-btn:hover { background: #f2f6fc; }
 .my-pos-btn:active { transform: scale(.94); }
 .my-pos-btn:focus-visible { outline: 3px solid #1e88e5; outline-offset: 2px; }
+
+/* 금연구역 안에 있을 때 내 위치에 붙는 경고 표시 (흡연모드를 켰을 때만).
+   .base: 내 위치 둘레에 계속 유지되는 빨간 원(검은 테두리), .ring: 그 둘레에서 퍼져 나가며 옅어지는 파동 3겹 */
+.zone-pulse { position: relative; width: 0; height: 0; pointer-events: none; }
+.zone-pulse .ring, .zone-pulse .base { position: absolute; left: -20px; top: -20px; width: 40px; height: 40px; border-radius: 50%; }
+.zone-pulse .ring {
+  background: rgba(229, 72, 77, .43); border: 2px solid var(--nonsmoking); animation: zone-pulse 1.8s ease-out infinite;
+}
+.zone-pulse .ring:nth-child(2) { animation-delay: .6s; }
+.zone-pulse .ring:nth-child(3) { animation-delay: 1.2s; }
+.zone-pulse .base { background: rgba(229, 72, 77, .43); border: 3px solid #111; box-sizing: border-box; }
+.zone-pulse .tag {
+  position: absolute; left: 50%; top: -66px; transform: translateX(-50%); white-space: nowrap; pointer-events: auto;
+  background: #111; color: #fff; font-size: 15px; font-weight: 800; letter-spacing: .02em; padding: 5px 14px; border-radius: 16px;
+  border: 2px solid #fff; box-shadow: 0 2px 8px rgba(0, 0, 0, .45);
+}
+@keyframes zone-pulse { 0% { transform: scale(1); opacity: .9; } 100% { transform: scale(1.8); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .zone-pulse .ring { display: none; } }

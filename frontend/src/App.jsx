@@ -9,6 +9,7 @@ import QuitAd from "./QuitAd.jsx";
 import SmokeModeSlider from "./SmokeModeSlider.jsx";
 import { zoneKind, zoneMarkerImage } from "./zoneIcons.js";
 import { buildAreas } from "./areas.js";
+import { findZonesAt } from "./nearbyZone.js";
 import LoginButton from "./LoginButton.jsx";
 import usePanelOffset from "./usePanelOffset.js";
 import LoginDialog from "./LoginDialog.jsx";
@@ -39,6 +40,11 @@ function extentM(f) {
 }
 
 // 내 위치 시작점: 항상 강남역 (앱을 켜면 이 자리에 내 위치 마커가 뜨고, 마우스로 끌어 옮길 수 있음). 지도 첫 화면 중심도 여기
+// 내 위치가 금연구역 안이면 마커에 붙이는 경고 파동. 주변 시설은 넉넉하게 받아 두고, 많이 움직였을 때만 다시 받음
+const NEAR_FETCH_LAT = 0.012; // 위도 방향 약 1.3km (넓은 공원 구역까지 포함하려고 넉넉하게)
+const NEAR_FETCH_LNG = 0.015; // 경도 방향 약 1.3km
+const NEAR_REFRESH_M = 400; // 받아 둔 중심에서 이만큼 벗어나면 다시 받음
+
 const START_GPS = { lat: 37.49799161931449, lng: 127.02770445495885 };
 
 const svgUri = (svg) => "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
@@ -108,6 +114,8 @@ export default function App() {
   const markersRef = useRef([]);
   const zoneAreasRef = useRef([]); // 직접 등록한 비흡연구역의 범위
   const facilityAreasRef = useRef([]); // 규칙으로 찾은 금연시설의 범위
+  const nearRef = useRef({ lat: null, lng: null, rows: [] }); // 내 위치 주변에서 받아 둔 시설 (금연구역 판단용)
+  const pulseRef = useRef(null); // 금연구역 안에 있을 때 내 위치에 띄우는 경고 파동
   const facilityBadgesRef = useRef([]);
   const areaPolysRef = useRef([]);
   const areasKeyRef = useRef("");
@@ -333,6 +341,21 @@ export default function App() {
     setListOrigin(null);
   };
 
+  // 내 위치(lat, lng)가 금연구역 안(hits가 있음)이면 마커에 파동과 "금연구역" 라벨을 붙이고, 아니면 뗌
+  const placePulse = (lat, lng, hits) => {
+    if (!hits.length) return pulseRef.current?.setMap(null);
+    if (!pulseRef.current) {
+      const el = document.createElement("div");
+      el.className = "zone-pulse";
+      el.innerHTML = '<span class="ring"></span><span class="ring"></span><span class="ring"></span><span class="base"></span><span class="tag">금연구역</span>';
+      pulseRef.current = new kakao.maps.CustomOverlay({ content: el, xAnchor: 0, yAnchor: 0, zIndex: 3 });
+    }
+    pulseRef.current.getContent().title = hits.map((h) => `${h.label} · ${h.name}`).join(", "); // 마우스를 올리면 어떤 시설인지
+    pulseRef.current.setPosition(new kakao.maps.LatLng(lat, lng));
+    // 이미 지도에 붙어 있으면 다시 붙이지 않음 (다시 붙이면 라벨이 깜빡이며 사라졌다 나타남). 위치만 옮김
+    if (pulseRef.current.getMap() !== mapRef.current) pulseRef.current.setMap(mapRef.current);
+  };
+
   // 내 위치 = 파란 점 마커. 브라우저 GPS는 쓰지 않고 항상 강남역(START_GPS)에서 시작하며,
   // 마우스로 끌어서 놓은 자리가 내 위치가 됨 (새로고침하면 다시 강남역)
   const locate = () => {
@@ -352,12 +375,46 @@ export default function App() {
       title: gpsDragRef.current ? "내 위치 (끌어서 옮길 수 있어요)" : "내 위치",
     });
     // 끌어서 놓으면 그 자리를 내 위치로 (길찾기 출발지가 '내 위치'면 경로도 다시 찾음)
+    // 끄는 동안에도 파동과 라벨이 마커를 따라다니며, 구역에 들어가면 나타나고 벗어나면 사라짐 (받아 둔 주변 시설로 바로 계산)
+    kakao.maps.event.addListener(marker, "drag", () => {
+      if (!flagsRef.current.showSmoking) return;
+      const p = marker.getPosition();
+      placePulse(p.getLat(), p.getLng(), findZonesAt(nearRef.current.rows, p.getLat(), p.getLng()));
+    });
     kakao.maps.event.addListener(marker, "dragend", () => {
       const p = marker.getPosition();
       setMyPos({ status: "ok", lat: p.getLat(), lng: p.getLng() });
     });
     myLocRef.current = marker;
   };
+
+  // 흡연모드를 켰을 때만: 내 위치가 금연구역 안이면 마커에 빨간 경고 파동과 "금연구역" 표시 (구역 밖이면 아무것도 없음)
+  useEffect(() => {
+    const hide = () => pulseRef.current?.setMap(null);
+    if (!kakao || !showSmoking || myPos.status !== "ok" || !mapRef.current) return hide();
+    let cancelled = false;
+    (async () => {
+      const KX = 111_320 * Math.cos((myPos.lat * Math.PI) / 180);
+      const c = nearRef.current;
+      const far = c.lat === null || Math.hypot((myPos.lng - c.lng) * KX, (myPos.lat - c.lat) * 111_320) > NEAR_REFRESH_M;
+      if (far) {
+        const qs = new URLSearchParams({
+          south: myPos.lat - NEAR_FETCH_LAT, north: myPos.lat + NEAR_FETCH_LAT, west: myPos.lng - NEAR_FETCH_LNG, east: myPos.lng + NEAR_FETCH_LNG,
+        });
+        try {
+          const rows = await fetch(`/api/facilities?${qs}`).then((r) => (r.ok ? r.json() : []));
+          nearRef.current = { lat: myPos.lat, lng: myPos.lng, rows };
+        } catch {
+          return; // 서버를 못 받으면 이번에는 판단하지 않음
+        }
+      }
+      if (cancelled) return;
+      placePulse(myPos.lat, myPos.lng, findZonesAt(nearRef.current.rows, myPos.lat, myPos.lng));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [kakao, showSmoking, myPos.status, myPos.lat, myPos.lng]);
 
   // [내 위치로] 버튼: 지도를 내 위치 마커(끌어 옮겼으면 옮긴 자리)로 이동
   // 왼쪽 사이드바가 지도를 덮고 있으면 그만큼 비켜서, 보이는 영역의 가운데에 마커가 오게 함
