@@ -320,7 +320,6 @@ export default function RoutePanel({ kakao, getCenter, myPos, start, end, setSta
               <div className="rr-foot">
                 <small className="muted">경로 정보: {mode === "car" ? "카카오모빌리티" : "카카오맵"}</small>
               </div>
-              {smoking && <QuitAd slot={0} variant="inline" />}
             </>
           )}
         </div>
@@ -335,7 +334,6 @@ export default function RoutePanel({ kakao, getCenter, myPos, start, end, setSta
       )}
       <div className="route-ads">
         {smoking && <QuitAd slot={1} />}
-        {smoking && <QuitAd slot={2} />}
       </div>
     </div>
   );
