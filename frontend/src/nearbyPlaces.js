@@ -25,7 +25,7 @@ function groupOf(p) {
   return last;
 }
 
-const toPlace = (p) => ({
+export const toPlace = (p) => ({
   id: p.id,
   name: p.place_name,
   group: groupOf(p),
