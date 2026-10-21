@@ -10,14 +10,13 @@ const PLACE_ID_RE = /^[0-9]{1,20}$/;
 // 쓰던 글 (대상별). 로그인이 만료돼 패널이 닫혔다가 다시 열려도 남아 있게 부품 밖에 보관
 const drafts = new Map();
 
-// 후기 쓰기 + 목록. 흡연구역(targetType "zone", zones.id), 일반 장소("place", 카카오 장소 번호),
-// 건물("building", 도로명주소로 같은 건물 후기를 모아 봄) 모두 받음
+// 후기 쓰기 + 목록. 일반 장소(targetType "place", 카카오 장소 번호),
+// 건물("building", 도로명주소로 같은 건물 후기를 모아 봄)을 받음 (흡연구역 후기는 받지 않음)
 // onAuthExpired: 쓰기·지우기가 401이면 부름 (로그인 창을 다시 띄우는 쪽에서 처리)
 export default function ReviewSection({ targetType, targetId, name, address, onAuthExpired }) {
   const { user, logout } = useAuth();
   const key = targetType === "building" ? `building:${address}` : `${targetType}:${targetId}`;
-  const supported =
-    targetType === "zone" || (PLACE_ID_RE.test(targetId) && (targetType === "place" || !!address));
+  const supported = PLACE_ID_RE.test(targetId) && (targetType === "place" || !!address);
   const [list, setList] = useState({ status: "loading", items: [], message: "" });
   const [rating, setRating] = useState(() => drafts.get(key)?.rating ?? 0);
   const [content, setContent] = useState(() => drafts.get(key)?.content ?? "");

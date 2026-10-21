@@ -480,7 +480,7 @@ def me(user: dict = Depends(current_user)):  # noqa: B008 (FastAPI 의존성 주
 def list_reviews(
     target_type: str = Query(""), target_id: str = Query(""), address: str = Query("")
 ):
-    """대상(흡연구역 zone / 일반 장소 place / 건물 building)의 후기 목록, 최신순
+    """대상(일반 장소 place / 건물 building)의 후기 목록, 최신순
 
     건물은 번호가 아니라 도로명주소로 모음: 같은 주소의 건물 후기와 그 건물 가게들의 후기를 함께 보여줌
     """
@@ -523,13 +523,7 @@ def list_reviewed_places():
 
 @app.post("/api/reviews", status_code=201, tags=["reviews"])
 def create_review(body: ReviewIn, user: dict = Depends(current_user)):  # noqa: B008 (FastAPI 의존성 주입 표준 방식)
-    # 흡연구역은 zones.db에 있는 구역만. 일반 장소는 번호 모양만 확인 (ReviewIn)
-    if body.target_type == "zone":
-        with get_conn(ZONES_DB) as zconn:
-            if not zconn.execute(
-                "SELECT 1 FROM zones WHERE id = ?", (int(body.target_id),)
-            ).fetchone():
-                raise HTTPException(404, "흡연구역을 찾을 수 없습니다")
+    # 일반 장소·건물은 번호 모양만 확인 (ReviewIn). 흡연구역(zone) 후기는 받지 않음
     with reviews_conn(USERS_DB) as conn:
         author_id = find_author(conn, user["user_id"])
         cur = conn.execute(
