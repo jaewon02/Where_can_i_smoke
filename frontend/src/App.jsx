@@ -23,6 +23,7 @@ const COLORS = { smoking: "#1f9d55", nonsmoking: "#e5484d" };
 // 카카오 지도 레벨은 숫자가 작을수록 많이 확대한 것. 화면이 복잡해지지 않게 확대했을 때만 금연구역을 보여줌
 const AREA_MAX_LEVEL = 3; // 이 레벨 이하로 확대했을 때만 금연구역 범위 표시
 const BADGE_MAX_LEVEL = 2; // 이 레벨 이하로 확대했을 때만 금연구역 배지 표시
+const REVIEW_MAX_LEVEL = 2; // 이 레벨 이하로 확대했을 때만 후기 핀·목록 표시 (최대 확대 1과 그 한 단계 위)
 // 금연구역은 사용자 눈에는 보이지 않게 하고, 위치(GPS) 판단 등 내부에서만 쓸 예정. 개발 중 확인할 때만 true로
 const SHOW_NONSMOKING_AREAS = false;
 
@@ -325,7 +326,7 @@ export default function App() {
       .filter((p) => p.lat != null)
       .map((p) => {
         const marker = new kakao.maps.Marker({
-          map: mapRef.current,
+          map: mapRef.current.getLevel() <= REVIEW_MAX_LEVEL ? mapRef.current : null,
           position: new kakao.maps.LatLng(p.lat, p.lng),
           title: `${p.address} (★ ${p.rating} · 후기 ${p.count}개)`,
           image,
@@ -896,6 +897,7 @@ export default function App() {
     kakao.maps.event.addListener(map, "click", (e) => openClickCard(e.latLng));
     let timer;
     setZoomLevel(map.getLevel());
+    kakao.maps.event.addListener(map, "zoom_changed", () => setZoomLevel(map.getLevel())); // 후기 핀·목록은 확대·축소 즉시 바뀌게
     kakao.maps.event.addListener(map, "idle", () => {
       setZoomLevel(map.getLevel());
       fetchZones();
@@ -911,6 +913,11 @@ export default function App() {
   useEffect(() => {
     if (kakao && !reviewZone) fetchReviewed();
   }, [kakao, reviewZone]);
+
+  // 많이 확대했을 때만 후기 핀을 지도에 올림
+  useEffect(() => {
+    reviewMarkersRef.current.forEach((m) => m.setMap(zoomLevel <= REVIEW_MAX_LEVEL ? mapRef.current : null));
+  }, [zoomLevel]);
 
   // 후기 패널이 열리면 떠 있는 카드가 패널에 가려지지 않게 (패널이 미끄러져 들어온 뒤에 잼)
   useEffect(() => {
@@ -987,6 +994,7 @@ export default function App() {
               onPick={pickZone}
               onRoutePick={pickRoutePoint}
               reviewed={visibleReviewed}
+              reviewHidden={zoomLevel > REVIEW_MAX_LEVEL}
               // 목록은 누를 때마다 열기/닫기 (이미 그 주소의 후기 패널이 열려 있으면 닫음)
               openAddress={reviewZone?.type === "building" && user ? reviewZone.address : null}
               onPickReviewed={(p) =>
