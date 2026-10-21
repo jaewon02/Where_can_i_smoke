@@ -7,13 +7,29 @@ from pathlib import Path
 from typing import Literal
 
 import httpx
+from auth import (
+    LoginIn,
+    SignupIn,
+    current_user,
+    hash_password,
+    issue_token,
+    revoke_token,
+    verify_password,
+)
+from db import get_conn
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-
-from auth import LoginIn, SignupIn, current_user, hash_password, issue_token, revoke_token, verify_password
-from db import get_conn
-from reviews import LIST_LIMIT, REVIEW_SELECT, ReviewIn, check_target, find_author, reviews_conn
+from reviews import (
+    ADDRESS_TYPES,
+    LIST_LIMIT,
+    REVIEW_SELECT,
+    ReviewIn,
+    check_address,
+    check_target,
+    find_author,
+    reviews_conn,
+)
 
 load_dotenv()
 
@@ -95,37 +111,54 @@ KAKAO_CAR_URL = "https://apis-navi.kakaomobility.com/v1/directions"
 DAILY_LIMIT = 950  # 종류별 (카카오 무료 사용량 하루 1,000건보다 조금 적게)
 # 서버를 다시 켜도 오늘 쓴 횟수가 이어지도록 파일에 저장 (.cache/는 git 제외)
 USAGE_FILE = Path(__file__).parent / ".cache" / "route_usage.json"
-MAX_ROUTE_M = {"walk": 10_000, "transit": 100_000, "car": 200_000}  # 직선거리가 이보다 멀면 부르지 않음
+MAX_ROUTE_M = {
+    "walk": 10_000,
+    "transit": 100_000,
+    "car": 200_000,
+}  # 직선거리가 이보다 멀면 부르지 않음
 MODE_LABEL = {"walk": "도보", "transit": "대중교통", "car": "자동차"}
 _route_cache: dict[tuple, dict] = {}
 
 
 def straight_m(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
     r = math.radians
-    h = math.sin(r(lat2 - lat1) / 2) ** 2 + math.cos(r(lat1)) * math.cos(r(lat2)) * math.sin(r(lng2 - lng1) / 2) ** 2
+    h = (
+        math.sin(r(lat2 - lat1) / 2) ** 2
+        + math.cos(r(lat1)) * math.cos(r(lat2)) * math.sin(r(lng2 - lng1) / 2) ** 2
+    )
     return 2 * 6371000 * math.asin(math.sqrt(h))
 
 
-MAX_DETOUR_M = 1500  # 흡연모드: 직선 기준으로 이보다 더 돌아가야 하는 흡연구역은 후보에서 제외
+MAX_DETOUR_M = (
+    1500  # 흡연모드: 직선 기준으로 이보다 더 돌아가야 하는 흡연구역은 후보에서 제외
+)
 NEAR_M = 50  # 출발지·도착지에서 이 거리 안의 흡연구역은 경유지 후보에서 제외
 
 
-def smoking_candidates(from_lat: float, from_lng: float, to_lat: float, to_lng: float, limit: int = 3) -> list[dict]:
+def smoking_candidates(
+    from_lat: float, from_lng: float, to_lat: float, to_lng: float, limit: int = 3
+) -> list[dict]:
     """출발→도착 사이에 들르기 좋은 흡연구역 (직선 기준 덜 돌아가는 순)"""
     pad = 0.015  # 약 1.5km
     with get_conn(ZONES_DB) as conn:
         rows = conn.execute(
             "SELECT id, name, lat, lng FROM zones WHERE type = 'smoking'"
             " AND lat BETWEEN ? AND ? AND lng BETWEEN ? AND ?",
-            (min(from_lat, to_lat) - pad, max(from_lat, to_lat) + pad,
-             min(from_lng, to_lng) - pad, max(from_lng, to_lng) + pad),
+            (
+                min(from_lat, to_lat) - pad,
+                max(from_lat, to_lat) + pad,
+                min(from_lng, to_lng) - pad,
+                max(from_lng, to_lng) + pad,
+            ),
         ).fetchall()
     direct = straight_m(from_lat, from_lng, to_lat, to_lng)
     out = []
     for z in rows:
         to_start = straight_m(from_lat, from_lng, z["lat"], z["lng"])
         to_end = straight_m(z["lat"], z["lng"], to_lat, to_lng)
-        if min(to_start, to_end) < NEAR_M:  # 출발지·도착지가 이미 흡연구역이면 들를 필요 없음
+        if (
+            min(to_start, to_end) < NEAR_M
+        ):  # 출발지·도착지가 이미 흡연구역이면 들를 필요 없음
             continue
         detour = to_start + to_end - direct
         if detour <= MAX_DETOUR_M:
@@ -147,7 +180,10 @@ def _count_call(mode: str) -> None:
     """카카오를 실제로 부르기 직전에 호출. 오늘 이 종류를 DAILY_LIMIT번 썼으면 부르지 않고 막음"""
     usage = _load_usage()
     if usage.get(mode, 0) >= DAILY_LIMIT:
-        raise HTTPException(429, f"오늘 {MODE_LABEL[mode]} 길찾기 사용량({DAILY_LIMIT}건)을 모두 썼어요. 내일 다시 시도해 주세요")
+        raise HTTPException(
+            429,
+            f"오늘 {MODE_LABEL[mode]} 길찾기 사용량({DAILY_LIMIT}건)을 모두 썼어요. 내일 다시 시도해 주세요",
+        )
     usage[mode] = usage.get(mode, 0) + 1
     USAGE_FILE.parent.mkdir(exist_ok=True)
     USAGE_FILE.write_text(json.dumps(usage), encoding="utf-8")
@@ -156,15 +192,26 @@ def _count_call(mode: str) -> None:
 async def _kakao_get(url: str, key: str, params: dict) -> dict:
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            res = await client.get(url, headers={"Authorization": f"KakaoAK {key}"}, params=params)
+            res = await client.get(
+                url, headers={"Authorization": f"KakaoAK {key}"}, params=params
+            )
     except httpx.HTTPError:
         raise HTTPException(502, "길찾기 서버에 연결하지 못했습니다")
     if res.status_code == 429:
-        raise HTTPException(429, "오늘 길찾기 사용량을 모두 썼어요. 내일 다시 시도해 주세요")
+        raise HTTPException(
+            429, "오늘 길찾기 사용량을 모두 썼어요. 내일 다시 시도해 주세요"
+        )
     if res.status_code in (401, 403):
-        raise HTTPException(502, "카카오 길찾기 권한이 없어요. REST API 키와 카카오맵 API 활성화 상태를 확인해 주세요")
+        raise HTTPException(
+            502,
+            "카카오 길찾기 권한이 없어요. REST API 키와 카카오맵 API 활성화 상태를 확인해 주세요",
+        )
     if res.status_code != 200:
-        msg = res.json().get("msg") if "json" in res.headers.get("content-type", "") else None
+        msg = (
+            res.json().get("msg")
+            if "json" in res.headers.get("content-type", "")
+            else None
+        )
         raise HTTPException(502, f"경로를 찾지 못했습니다{f' ({msg})' if msg else ''}")
     return res.json()
 
@@ -189,7 +236,9 @@ async def walk_route(key: str, frm: tuple, to: tuple, via: dict | None) -> dict:
         params.update(via_x=via["lng"], via_y=via["lat"])
     data = await _kakao_get(KAKAO_WALK_URL, key, params)
     if data.get("status") != "OK":
-        raise HTTPException(422, ROUTE_ERRORS.get(data.get("status"), "경로를 찾지 못했어요"))
+        raise HTTPException(
+            422, ROUTE_ERRORS.get(data.get("status"), "경로를 찾지 못했어요")
+        )
     route = data["route"]
     path: list[list[float]] = []
     for leg in route.get("legs", []):
@@ -198,7 +247,11 @@ async def walk_route(key: str, frm: tuple, to: tuple, via: dict | None) -> dict:
                 if not path or path[-1] != p:
                     path.append(p)
     props = route["properties"]
-    return {"distance_m": props["totalDistance"], "time_s": props["totalTime"], "path": path}
+    return {
+        "distance_m": props["totalDistance"],
+        "time_s": props["totalTime"],
+        "path": path,
+    }
 
 
 def _fare(fare) -> int | None:
@@ -218,49 +271,68 @@ async def transit_route(key: str, frm: tuple, to: tuple) -> dict:
     params = {"start_x": frm[1], "start_y": frm[0], "end_x": to[1], "end_y": to[0]}
     data = await _kakao_get(KAKAO_TRANSIT_URL, key, params)
     if data.get("status") != "OK" or not data.get("routes"):
-        raise HTTPException(422, ROUTE_ERRORS.get(data.get("status"), "대중교통 경로를 찾지 못했어요"))
+        raise HTTPException(
+            422, ROUTE_ERRORS.get(data.get("status"), "대중교통 경로를 찾지 못했어요")
+        )
     # 경로가 10개 넘게 오기도 해서 빠른 순으로 3개만
-    routes = sorted(data["routes"], key=lambda r: r.get("properties", {}).get("totalTime") or 1e9)[:3]
+    routes = sorted(
+        data["routes"], key=lambda r: r.get("properties", {}).get("totalTime") or 1e9
+    )[:3]
     options = []
     for r in routes:
         props = r.get("properties", {})
-        steps = r.get("steps") or [s for leg in r.get("legs", []) for s in leg.get("steps", [])]
+        steps = r.get("steps") or [
+            s for leg in r.get("legs", []) for s in leg.get("steps", [])
+        ]
         segments = []
         for s in steps:
             sp = s.get("properties", s)
             stops = [st.get("name") for st in sp.get("stops", []) if st.get("name")]
             vehicles = [v.get("name") for v in sp.get("vehicles", []) if v.get("name")]
-            segments.append({
-                "type": sp.get("type"),  # WALKING / BUS / SUBWAY
-                "guidance": sp.get("guidance"),
-                "distance_m": sp.get("distance"),
-                "time_s": sp.get("time"),
-                "from": stops[0] if stops else None,
-                "to": stops[-1] if len(stops) > 1 else None,
-                "stop_count": max(len(stops) - 1, 0),
-                "vehicles": vehicles,
-                "path": _latlng(s.get("path", {}).get("points", [])),
-            })
-        options.append({
-            "type": props.get("type"),
-            "distance_m": props.get("totalDistance"),
-            "time_s": props.get("totalTime"),
-            "transfers": props.get("transfers"),
-            "fare": _fare(props.get("fare")),
-            "segments": segments,
-            "path": [p for seg in segments for p in seg["path"]],
-        })
-    return {**{k: options[0][k] for k in ("distance_m", "time_s", "path")}, "options": options}
+            segments.append(
+                {
+                    "type": sp.get("type"),  # WALKING / BUS / SUBWAY
+                    "guidance": sp.get("guidance"),
+                    "distance_m": sp.get("distance"),
+                    "time_s": sp.get("time"),
+                    "from": stops[0] if stops else None,
+                    "to": stops[-1] if len(stops) > 1 else None,
+                    "stop_count": max(len(stops) - 1, 0),
+                    "vehicles": vehicles,
+                    "path": _latlng(s.get("path", {}).get("points", [])),
+                }
+            )
+        options.append(
+            {
+                "type": props.get("type"),
+                "distance_m": props.get("totalDistance"),
+                "time_s": props.get("totalTime"),
+                "transfers": props.get("transfers"),
+                "fare": _fare(props.get("fare")),
+                "segments": segments,
+                "path": [p for seg in segments for p in seg["path"]],
+            }
+        )
+    return {
+        **{k: options[0][k] for k in ("distance_m", "time_s", "path")},
+        "options": options,
+    }
 
 
 async def car_route(key: str, frm: tuple, to: tuple, via: dict | None) -> dict:
-    params = {"origin": f"{frm[1]},{frm[0]}", "destination": f"{to[1]},{to[0]}", "priority": "RECOMMEND"}
+    params = {
+        "origin": f"{frm[1]},{frm[0]}",
+        "destination": f"{to[1]},{to[0]}",
+        "priority": "RECOMMEND",
+    }
     if via:
         params["waypoints"] = f"{via['lng']},{via['lat']}"
     data = await _kakao_get(KAKAO_CAR_URL, key, params)
     route = (data.get("routes") or [{}])[0]
     if route.get("result_code") != 0:
-        raise HTTPException(422, route.get("result_msg") or "자동차 경로를 찾지 못했어요")
+        raise HTTPException(
+            422, route.get("result_msg") or "자동차 경로를 찾지 못했어요"
+        )
     path: list[list[float]] = []
     for sec in route.get("sections", []):
         for road in sec.get("roads", []):
@@ -270,15 +342,24 @@ async def car_route(key: str, frm: tuple, to: tuple, via: dict | None) -> dict:
                     path.append(p)
     summary = route["summary"]
     fare = summary.get("fare", {})
-    return {"distance_m": summary["distance"], "time_s": summary["duration"], "path": path,
-            "toll": fare.get("toll"), "taxi": fare.get("taxi")}
+    return {
+        "distance_m": summary["distance"],
+        "time_s": summary["duration"],
+        "path": path,
+        "toll": fare.get("toll"),
+        "taxi": fare.get("taxi"),
+    }
 
 
 @app.get("/api/route/usage")
 def route_usage():
     """오늘 길찾기 종류별 사용량 (카카오 호출 횟수, 캐시로 응답한 건은 제외)"""
     usage = _load_usage()
-    return {"date": usage["date"], "limit": DAILY_LIMIT, **{m: usage.get(m, 0) for m in MODE_LABEL}}
+    return {
+        "date": usage["date"],
+        "limit": DAILY_LIMIT,
+        **{m: usage.get(m, 0) for m in MODE_LABEL},
+    }
 
 
 @app.get("/api/route")
@@ -287,18 +368,29 @@ async def find_route(
     from_lng: float = Query(..., ge=124, le=132),
     to_lat: float = Query(..., ge=33, le=39),
     to_lng: float = Query(..., ge=124, le=132),
-    mode: Literal["walk", "transit", "car"] = Query("walk", description="도보 / 대중교통 / 자동차"),
-    smoking: bool = Query(False, description="흡연모드: 중간에 흡연구역을 들렀다 감 (도보·자동차만)"),
-    via_zone_id: int | None = Query(None, description="흡연모드에서 들를 흡연구역을 직접 고를 때"),
+    mode: Literal["walk", "transit", "car"] = Query(
+        "walk", description="도보 / 대중교통 / 자동차"
+    ),
+    smoking: bool = Query(
+        False, description="흡연모드: 중간에 흡연구역을 들렀다 감 (도보·자동차만)"
+    ),
+    via_zone_id: int | None = Query(
+        None, description="흡연모드에서 들를 흡연구역을 직접 고를 때"
+    ),
 ):
     """출발 → (흡연구역) → 도착 경로. path는 [[lat, lng], ...]"""
     key = os.getenv("KAKAO_REST_API_KEY", "").strip()
     if not key:
-        raise HTTPException(503, "길찾기 키가 설정되지 않았습니다 (backend/.env의 KAKAO_REST_API_KEY)")
+        raise HTTPException(
+            503, "길찾기 키가 설정되지 않았습니다 (backend/.env의 KAKAO_REST_API_KEY)"
+        )
 
     dist = straight_m(from_lat, from_lng, to_lat, to_lng)
     if dist > MAX_ROUTE_M[mode]:
-        raise HTTPException(422, f"{MODE_LABEL[mode]} 길찾기는 직선 {MAX_ROUTE_M[mode] // 1000}km 이내만 안내해요")
+        raise HTTPException(
+            422,
+            f"{MODE_LABEL[mode]} 길찾기는 직선 {MAX_ROUTE_M[mode] // 1000}km 이내만 안내해요",
+        )
     if dist < 10:
         raise HTTPException(422, "출발지와 도착지가 너무 가까워요")
 
@@ -307,7 +399,11 @@ async def find_route(
     candidates: list[dict] = []
     if smoking and mode != "transit":
         candidates = smoking_candidates(from_lat, from_lng, to_lat, to_lng)
-        via = next((c for c in candidates if c["id"] == via_zone_id), None) if via_zone_id else None
+        via = (
+            next((c for c in candidates if c["id"] == via_zone_id), None)
+            if via_zone_id
+            else None
+        )
         via = via or (candidates[0] if candidates else None)
 
     # 좌표를 약 10m 단위로 반올림해서 같은 요청은 캐시로 응답
@@ -333,16 +429,22 @@ async def find_route(
 def signup(body: SignupIn):
     password_hash = hash_password(body.password)  # 시간이 걸리므로 DB를 열기 전에 계산
     with get_conn(USERS_DB) as conn:
-        if conn.execute("SELECT 1 FROM users WHERE user_id = ?", (body.user_id,)).fetchone():
+        if conn.execute(
+            "SELECT 1 FROM users WHERE user_id = ?", (body.user_id,)
+        ).fetchone():
             raise HTTPException(409, "이미 쓰고 있는 아이디입니다")
-        if conn.execute("SELECT 1 FROM users WHERE nickname = ?", (body.nickname,)).fetchone():
+        if conn.execute(
+            "SELECT 1 FROM users WHERE nickname = ?", (body.nickname,)
+        ).fetchone():
             raise HTTPException(409, "이미 쓰고 있는 닉네임입니다")
         try:
             conn.execute(
                 "INSERT INTO users (nickname, user_id, password_hash) VALUES (?,?,?)",
                 (body.nickname, body.user_id, password_hash),
             )
-        except sqlite3.IntegrityError:  # 위 확인과 저장 사이에 같은 아이디/닉네임이 먼저 들어온 경우
+        except (
+            sqlite3.IntegrityError
+        ):  # 위 확인과 저장 사이에 같은 아이디/닉네임이 먼저 들어온 경우
             raise HTTPException(409, "이미 쓰고 있는 아이디 또는 닉네임입니다")
     token = issue_token(body.user_id, body.nickname)
     return {"token": token, "nickname": body.nickname, "user_id": body.user_id}
@@ -352,7 +454,8 @@ def signup(body: SignupIn):
 def login(body: LoginIn):
     with get_conn(USERS_DB) as conn:
         user = conn.execute(
-            "SELECT nickname, user_id, password_hash FROM users WHERE user_id = ?", (body.user_id,)
+            "SELECT nickname, user_id, password_hash FROM users WHERE user_id = ?",
+            (body.user_id,),
         ).fetchone()
     # 아이디가 없을 때와 비밀번호가 틀렸을 때 같은 문장 (어느 쪽인지 알려 주지 않음)
     if not user or not verify_password(body.password, user["password_hash"]):
@@ -362,56 +465,82 @@ def login(body: LoginIn):
 
 
 @app.post("/api/auth/logout", tags=["auth"])
-def logout(user: dict = Depends(current_user)):
+def logout(user: dict = Depends(current_user)):  # noqa: B008 (FastAPI 의존성 주입 표준 방식)
     revoke_token(user["token"])
     return {"detail": "로그아웃되었습니다"}
 
 
 @app.get("/api/auth/me", tags=["auth"])
-def me(user: dict = Depends(current_user)):
+def me(user: dict = Depends(current_user)):  # noqa: B008 (FastAPI 의존성 주입 표준 방식)
     return {"nickname": user["nickname"], "user_id": user["user_id"]}
 
 
 # ---------- 후기 (도우미 함수는 reviews.py) ----------
 @app.get("/api/reviews", tags=["reviews"])
-def list_reviews(target_type: str = Query(""), target_id: str = Query("")):
-    """대상(흡연구역 zone / 일반 장소 place)의 후기 목록, 최신순"""
+def list_reviews(
+    target_type: str = Query(""), target_id: str = Query(""), address: str = Query("")
+):
+    """대상(흡연구역 zone / 일반 장소 place / 건물 building)의 후기 목록, 최신순
+
+    건물은 번호가 아니라 도로명주소로 모음: 같은 주소의 건물 후기와 그 건물 가게들의 후기를 함께 보여줌
+    """
     try:
         target_type, target_id = check_target(target_type, target_id)
+        address = check_address(address, required=target_type == "building")
     except ValueError as e:
         raise HTTPException(422, str(e))
     with reviews_conn(USERS_DB) as conn:
-        rows = conn.execute(
-            f"{REVIEW_SELECT} WHERE r.target_type = ? AND r.target_id = ? ORDER BY r.id DESC LIMIT ?",
-            (target_type, target_id, LIST_LIMIT),
-        )
+        if target_type == "building":
+            marks = ",".join("?" * len(ADDRESS_TYPES))
+            rows = conn.execute(
+                f"{REVIEW_SELECT} WHERE r.target_type IN ({marks}) AND r.address = ? ORDER BY r.id DESC LIMIT ?",
+                (*ADDRESS_TYPES, address, LIST_LIMIT),
+            )
+        else:
+            rows = conn.execute(
+                f"{REVIEW_SELECT} WHERE r.target_type = ? AND r.target_id = ? ORDER BY r.id DESC LIMIT ?",
+                (target_type, target_id, LIST_LIMIT),
+            )
         return [dict(r) for r in rows]
 
 
 @app.post("/api/reviews", status_code=201, tags=["reviews"])
-def create_review(body: ReviewIn, user: dict = Depends(current_user)):
+def create_review(body: ReviewIn, user: dict = Depends(current_user)):  # noqa: B008 (FastAPI 의존성 주입 표준 방식)
     # 흡연구역은 zones.db에 있는 구역만. 일반 장소는 번호 모양만 확인 (ReviewIn)
     if body.target_type == "zone":
         with get_conn(ZONES_DB) as zconn:
-            if not zconn.execute("SELECT 1 FROM zones WHERE id = ?", (int(body.target_id),)).fetchone():
+            if not zconn.execute(
+                "SELECT 1 FROM zones WHERE id = ?", (int(body.target_id),)
+            ).fetchone():
                 raise HTTPException(404, "흡연구역을 찾을 수 없습니다")
     with reviews_conn(USERS_DB) as conn:
         author_id = find_author(conn, user["user_id"])
         cur = conn.execute(
-            "INSERT INTO reviews (target_type, target_id, author_id, rating, content) VALUES (?,?,?,?,?)",
-            (body.target_type, body.target_id, author_id, body.rating, body.content),
+            "INSERT INTO reviews (target_type, target_id, address, author_id, rating, content) VALUES (?,?,?,?,?,?)",
+            (
+                body.target_type,
+                body.target_id,
+                body.address,
+                author_id,
+                body.rating,
+                body.content,
+            ),
         )
-        return dict(conn.execute(f"{REVIEW_SELECT} WHERE r.id = ?", (cur.lastrowid,)).fetchone())
+        return dict(
+            conn.execute(f"{REVIEW_SELECT} WHERE r.id = ?", (cur.lastrowid,)).fetchone()
+        )
 
 
 @app.delete("/api/reviews/{review_id}", tags=["reviews"])
-def delete_review(review_id: str, user: dict = Depends(current_user)):
+def delete_review(review_id: str, user: dict = Depends(current_user)):  # noqa: B008 (FastAPI 의존성 주입 표준 방식)
     """내가 쓴 후기만 지움"""
     with reviews_conn(USERS_DB) as conn:
         author_id = find_author(conn, user["user_id"])
         row = None
         if review_id.isascii() and review_id.isdigit():
-            row = conn.execute("SELECT author_id FROM reviews WHERE id = ?", (int(review_id),)).fetchone()
+            row = conn.execute(
+                "SELECT author_id FROM reviews WHERE id = ?", (int(review_id),)
+            ).fetchone()
         if not row:
             raise HTTPException(404, "후기를 찾을 수 없습니다")
         if row["author_id"] != author_id:

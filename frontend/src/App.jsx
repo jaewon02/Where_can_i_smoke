@@ -602,8 +602,8 @@ export default function App() {
     q(".cc-title").textContent = title;
     q(".cc-cat").textContent = `${list.length}곳`;
     q(".cc-addr").textContent = key;
-    // 건물 후기 (예시): 건물에는 카카오 장소 번호가 없어서, DB는 그대로 두고 처음 누른 가게 번호로 후기를 묶음
-    const reviewTarget = { id: clicked.id, type: "place", label: "건물", name: title, address: key, note: `${list.length}곳` };
+    // 건물 후기: 도로명주소로 묶어서, 같은 건물이면 어느 가게를 눌러 들어와도 같은 후기 목록 (번호는 처음 누른 장소, 기록용)
+    const reviewTarget = { id: clicked.id, type: "building", label: "건물", name: title, address: key, note: `${list.length}곳` };
     q(".cc-reviews").onclick = () => requireLogin().then((user) => user && setReviewZone(reviewTarget));
     const ul = q(".bl-list");
     for (const p of list) {

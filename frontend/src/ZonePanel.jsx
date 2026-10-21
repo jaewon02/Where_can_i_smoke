@@ -9,6 +9,8 @@ const TYPE_LABEL = { smoking: "흡연구역", nonsmoking: "비흡연구역" };
 export default function ZonePanel({ zone, onClose, onAuthExpired }) {
   const { user } = useAuth(); // 패널이 열릴 때 서버에 로그인 상태를 다시 확인
   const closeRef = useRef(null);
+  // 일반 장소(place)·건물(building)은 그대로, 나머지(흡연·비흡연구역)는 zone
+  const targetType = zone.type === "place" || zone.type === "building" ? zone.type : "zone";
 
   useEffect(() => {
     closeRef.current?.focus();
@@ -38,8 +40,8 @@ export default function ZonePanel({ zone, onClose, onAuthExpired }) {
         </header>
 
         <ReviewSection
-          key={`${zone.type === "place" ? "place" : "zone"}:${zone.id}`}
-          targetType={zone.type === "place" ? "place" : "zone"}
+          key={`${targetType}:${targetType === "building" ? zone.address : zone.id}`}
+          targetType={targetType}
           targetId={String(zone.id)}
           name={zone.name}
           address={zone.address}

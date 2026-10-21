@@ -3,20 +3,25 @@
 후기는 users.db의 reviews 표에 저장합니다. 서버는 표를 만들지 않으므로 표가 없으면 503을 냅니다.
 users.db를 직접 여는 연결은 외래 키 검사가 꺼져 있을 수 있어서, 작성자가 users에 있는지는 코드에서 직접 확인합니다.
 """
+
 import re
 import sqlite3
 from contextlib import contextmanager
 
+from db import get_conn
 from fastapi import HTTPException
 from pydantic import BaseModel, model_validator
 
-from db import get_conn
-
 # 흡연구역은 zones.id, 일반 장소는 카카오 장소 번호 (버스정류장 'bus-…'처럼 숫자가 아닌 번호는 받지 않음)
+# 건물은 처음 누른 장소의 카카오 번호(기록용)이고, 실제로는 도로명주소(address)로 후기를 묶음
 TARGET_ID_RE = {
     "zone": re.compile(r"[1-9][0-9]{0,9}"),
     "place": re.compile(r"[0-9]{1,20}"),
+    "building": re.compile(r"[0-9]{1,20}"),
 }
+# 건물 후기 목록에 같이 보여줄 종류: 같은 주소의 건물 후기 + 그 건물 가게들의 후기
+ADDRESS_TYPES = ("place", "building")
+ADDRESS_MAX = 200
 CONTENT_MAX = 500
 LIST_LIMIT = 100  # 목록은 최신 100개까지 (1차는 페이지 나누기 없음)
 
@@ -31,15 +36,30 @@ REVIEW_SELECT = (
 def check_target(target_type, target_id) -> tuple[str, str]:
     """대상 종류와 번호 모양 검사. 틀리면 한국어 ValueError"""
     if target_type not in TARGET_ID_RE:
-        raise ValueError("대상 종류는 zone 또는 place여야 합니다")
-    if not isinstance(target_id, str) or not TARGET_ID_RE[target_type].fullmatch(target_id):
+        raise ValueError("대상 종류는 zone, place, building 중 하나여야 합니다")
+    if not isinstance(target_id, str) or not TARGET_ID_RE[target_type].fullmatch(
+        target_id
+    ):
         raise ValueError("대상 번호가 올바르지 않습니다")
     return target_type, target_id
+
+
+def check_address(address, required: bool) -> str | None:
+    """도로명주소 정리·검사. 비어 있으면 None (건물이면 필수라서 ValueError)"""
+    address = " ".join(address.split()) if isinstance(address, str) else ""
+    if not address:
+        if required:
+            raise ValueError("건물 후기는 주소가 필요합니다")
+        return None
+    if len(address) > ADDRESS_MAX:
+        raise ValueError(f"주소는 {ADDRESS_MAX}자 이하여야 합니다")
+    return address
 
 
 class ReviewIn(BaseModel):
     target_type: str
     target_id: str
+    address: str | None = None
     rating: int
     content: str
 
@@ -47,18 +67,29 @@ class ReviewIn(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def check_fields(cls, data):
-        if not isinstance(data, dict):  # JSON 객체가 아닌 본문은 pydantic 기본 오류에 맡김
+        if not isinstance(
+            data, dict
+        ):  # JSON 객체가 아닌 본문은 pydantic 기본 오류에 맡김
             return data
         check_target(data.get("target_type"), data.get("target_id"))
+        address = check_address(
+            data.get("address"), required=data.get("target_type") == "building"
+        )
         rating = data.get("rating")
         # True/False도 int라서 따로 막음
-        if not isinstance(rating, int) or isinstance(rating, bool) or not 1 <= rating <= 5:
+        if (
+            not isinstance(rating, int)
+            or isinstance(rating, bool)
+            or not 1 <= rating <= 5
+        ):
             raise ValueError("별점은 1~5 사이 정수여야 합니다")
         content = data.get("content")
         content = content.strip() if isinstance(content, str) else ""
         if not 1 <= len(content) <= CONTENT_MAX:
-            raise ValueError(f"후기 내용은 앞뒤 공백을 빼고 1~{CONTENT_MAX}자여야 합니다")
-        return {**data, "content": content}
+            raise ValueError(
+                f"후기 내용은 앞뒤 공백을 빼고 1~{CONTENT_MAX}자여야 합니다"
+            )
+        return {**data, "address": address, "content": content}
 
 
 @contextmanager

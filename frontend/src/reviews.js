@@ -32,11 +32,16 @@ async function request(path, { method = "GET", body, auth = false } = {}) {
   throw Object.assign(new Error(errorMessage(data.detail)), { status: res.status });
 }
 
-// targetType: "zone"(흡연구역) | "place"(일반 장소), targetId: 글자 번호
-export const listReviews = (targetType, targetId) =>
-  request(`?${new URLSearchParams({ target_type: targetType, target_id: targetId })}`);
+// targetType: "zone"(흡연구역) | "place"(일반 장소) | "building"(건물), targetId: 글자 번호
+// address: 도로명주소. 건물은 이 주소로 같은 건물의 후기를 모두 모아 옴
+export const listReviews = (targetType, targetId, address) =>
+  request(`?${new URLSearchParams({ target_type: targetType, target_id: targetId, address: address ?? "" })}`);
 
-export const createReview = ({ targetType, targetId, rating, content }) =>
-  request("", { method: "POST", auth: true, body: { target_type: targetType, target_id: targetId, rating, content } });
+export const createReview = ({ targetType, targetId, address, rating, content }) =>
+  request("", {
+    method: "POST",
+    auth: true,
+    body: { target_type: targetType, target_id: targetId, address: address || null, rating, content },
+  });
 
 export const deleteReview = (id) => request(`/${id}`, { method: "DELETE", auth: true });
