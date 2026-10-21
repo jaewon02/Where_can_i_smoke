@@ -40,7 +40,11 @@ USERS_DB = os.getenv("USERS_DB")  # 회원 정보
 app = FastAPI(title="where_can_i_smoke")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:5174"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "http://localhost:4173",
+    ],
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
