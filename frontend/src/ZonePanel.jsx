@@ -5,12 +5,12 @@ import { useAuth } from "./auth.js";
 
 const TYPE_LABEL = { smoking: "흡연구역", nonsmoking: "비흡연구역" };
 
-// 오른쪽 후기 패널 (후기 보기). 흡연구역 또는 일반 장소(type: "place", label: 종류)의 정보를 보여주고, 후기는 로그인한 사람에게만 보여줌
+// 오른쪽 후기 패널 (후기 보기). 일반 장소(type: "place", label: 종류) 또는 건물(type: "building")의 정보를 보여주고, 후기는 로그인한 사람에게만 보여줌
 export default function ZonePanel({ zone, onClose, onAuthExpired }) {
   const { user } = useAuth(); // 패널이 열릴 때 서버에 로그인 상태를 다시 확인
   const closeRef = useRef(null);
-  // 일반 장소(place)·건물(building)은 그대로, 나머지(흡연·비흡연구역)는 zone
-  const targetType = zone.type === "place" || zone.type === "building" ? zone.type : "zone";
+  // 건물(building)이 아니면 일반 장소(place). 흡연구역은 후기를 받지 않아 이 패널을 열지 않음
+  const targetType = zone.type === "building" ? "building" : "place";
 
   useEffect(() => {
     closeRef.current?.focus();

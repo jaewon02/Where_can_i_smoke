@@ -784,9 +784,9 @@ export default function App() {
       });
     }
     q(".cc-note").textContent = place.note ?? "";
-    // 후기 보기 (흡연구역·일반 장소 카드 모두): 서버에 로그인을 확인하고, 로그인 전이면 로그인 창을 띄워 로그인하면 이어서 오른쪽 패널을 엶
-    // 일반 장소는 카드에 있는 정보로 패널 내용을 만듦 (서버·DB는 부르지 않음)
-    const reviewTarget = place.zone ?? {
+    // 후기 보기 (일반 장소 카드): 서버에 로그인을 확인하고, 로그인 전이면 로그인 창을 띄워 로그인하면 이어서 오른쪽 패널을 엶
+    // 카드에 있는 정보로 패널 내용을 만듦 (서버·DB는 부르지 않음). 흡연구역 카드에는 후기 버튼이 없음
+    const reviewTarget = {
       id: place.id,
       type: "place",
       label: cat || "장소",
@@ -795,7 +795,7 @@ export default function App() {
       note: place.phone ? `☎ ${place.phone}` : "",
     };
     q(".cc-reviews").onclick = () => requireLogin().then((user) => user && setReviewZone(reviewTarget));
-    if (onBack) q(".cc-reviews").remove(); // 건물 목록에서 연 가게는 후기를 건물 목록 카드에서 봄
+    if (onBack || place.noReviews) q(".cc-reviews").remove(); // 건물 목록에서 연 가게는 후기를 건물 목록 카드에서 보고, 흡연구역은 후기를 받지 않음
     if (place.onPin) el.classList.add("cc-on-pin"); // 핀 마커 위에 띄울 때는 핀을 가리지 않게 더 위로
     const phone = q(".cc-phone");
     phone.textContent = place.phone;
@@ -862,7 +862,7 @@ export default function App() {
         jibunAddress: "",
         address,
         note: z.note ?? "",
-        zone: z, // [후기 보기] 버튼 (오른쪽 패널에 이 구역 정보와 후기)
+        noReviews: true, // 흡연구역은 후기를 받지 않음 ([후기 보기] 버튼 없음)
         phone: "",
         lat: z.lat,
         lng: z.lng,
@@ -872,15 +872,11 @@ export default function App() {
     );
   };
 
-  // 사이드바 목록에서 흡연구역을 고르면 그 핀 위에 정보 카드 + 오른쪽 후기 패널 (목록은 화면 안 구역이라 지도는 그대로)
-  // 같은 구역을 다시 누르면 둘 다 닫음 (후기 있는 장소 목록과 같은 열기/닫기)
+  // 사이드바 목록에서 흡연구역을 고르면 그 핀 위에 정보 카드 (목록은 화면 안 구역이라 지도는 그대로)
+  // 같은 구역을 다시 누르면 카드를 닫음
   const pickZone = (z) => {
-    if (reviewZone && reviewZone.type !== "place" && reviewZone.type !== "building" && reviewZone.id === z.id) {
-      closeClickCard();
-      return setReviewZone(null);
-    }
+    if (selectedId === z.id) return closeClickCard();
     openZoneCard(z);
-    requireLogin().then((user) => user && setReviewZone(z));
     if (window.matchMedia("(max-width: 600px)").matches) setSidebarOpen(false);
   };
 

@@ -30,7 +30,7 @@ USERS_DB=users.db
 ```
 
 ### `zones.db` (`ZONES_DB`)
-사용하는 API: 구역 목록·상세, 후기 작성, 금연 규칙 대상 시설, 길찾기 흡연모드
+사용하는 API: 구역 목록·상세, 금연 규칙 대상 시설, 길찾기 흡연모드
 
 | 표 | 컬럼 |
 |---|---|
@@ -44,4 +44,4 @@ USERS_DB=users.db
 | 표 | 컬럼 |
 |---|---|
 | `users` | `id`, `nickname`, `user_id`, `password_hash`, `created_at` |
-| `reviews` | `id`, `target_type`, `target_id`, `author_id`, `rating`, `content`, `created_at` |
+| `reviews` | `id`, `target_type`, `target_id`, `address`, `author_id`, `rating`, `content`, `created_at` |

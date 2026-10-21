@@ -12,10 +12,9 @@ from db import get_conn
 from fastapi import HTTPException
 from pydantic import BaseModel, model_validator
 
-# 흡연구역은 zones.id, 일반 장소는 카카오 장소 번호 (버스정류장 'bus-…'처럼 숫자가 아닌 번호는 받지 않음)
+# 일반 장소는 카카오 장소 번호 (버스정류장 'bus-…'처럼 숫자가 아닌 번호는 받지 않음). 흡연구역(zone) 후기는 받지 않음
 # 건물은 처음 누른 장소의 카카오 번호(기록용)이고, 실제로는 도로명주소(address)로 후기를 묶음
 TARGET_ID_RE = {
-    "zone": re.compile(r"[1-9][0-9]{0,9}"),
     "place": re.compile(r"[0-9]{1,20}"),
     "building": re.compile(r"[0-9]{1,20}"),
 }
@@ -36,7 +35,7 @@ REVIEW_SELECT = (
 def check_target(target_type, target_id) -> tuple[str, str]:
     """대상 종류와 번호 모양 검사. 틀리면 한국어 ValueError"""
     if target_type not in TARGET_ID_RE:
-        raise ValueError("대상 종류는 zone, place, building 중 하나여야 합니다")
+        raise ValueError("대상 종류는 place, building 중 하나여야 합니다")
     if not isinstance(target_id, str) or not TARGET_ID_RE[target_type].fullmatch(
         target_id
     ):
