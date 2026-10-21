@@ -466,18 +466,18 @@ export default function App() {
     const segLines = (segments ?? [])
       .filter((s) => s.path.length > 1)
       .map((s) => line(s.path.map(ll), s.type === "WALKING", SEG_COLOR[s.type] ?? "#1e88e5"));
-    // 출발/도착 표시 (내 위치에서 출발하면 파란 점이 이미 있으므로 출발 표시는 생략)
+    // 출발/도착 표시
     const pin = (pos, kind, label) => {
       const el = document.createElement("div");
       el.className = `route-pin ${kind}`;
       el.textContent = label;
-      return new kakao.maps.CustomOverlay({ map, position: pos, content: el, yAnchor: 1.3, zIndex: 5 });
+      return new kakao.maps.CustomOverlay({ map, position: pos, content: el, yAnchor: 1, zIndex: 5 });
     };
     routeOverlaysRef.current = [
       ...(pts.length
         ? [...(segLines.length ? segLines : [line(pts)]), line([startPt, pts[0]], true), line([pts[pts.length - 1], endPt], true)]
         : [line([startPt, endPt], true)]),
-      ...(start.isMe ? [] : [pin(startPt, "start", "출발")]),
+      pin(startPt, "start", "출발"),
       pin(endPt, "end", "도착"),
       ...(via ? [pin(ll([via.lat, via.lng]), "via", "흡연")] : []),
     ];

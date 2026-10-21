@@ -212,13 +212,19 @@ body { margin: 0; font-family: system-ui, "Noto Sans KR", sans-serif; }
 .pi-results .pi-msg { padding: 10px 12px; font-size: 13px; color: #666; cursor: default; }
 .route-hint { margin: 0; padding: 4px 18px; font-size: 13px; color: #888; line-height: 1.6; }
 
-/* 지도 위 출발/도착 표시 */
+/* 지도 위 출발(파랑)·도착(빨강)·흡연(검정) 물방울 핀 (아래 뾰족한 끝이 그 지점, 높이 44px = 원 36px + 끝) */
 .route-pin {
-  padding: 3px 9px; border-radius: 12px; color: #fff; font-size: 12px; font-weight: 700;
-  border: 2px solid #fff; box-shadow: 0 1px 5px rgba(0,0,0,.35); white-space: nowrap;
+  position: relative; isolation: isolate; width: 36px; height: 44px; line-height: 36px; text-align: center;
+  color: #fff; font-size: 12px; font-weight: 700; white-space: nowrap;
 }
-.route-pin.start { background: #1e88e5; }
-.route-pin.end { background: #333; }
+.route-pin.start { --pin: #2373F4; }
+.route-pin.end { --pin: #D90000; }
+.route-pin.via { --pin: #000; }
+.route-pin::before {
+  content: ""; position: absolute; top: 0; left: 0; width: 36px; height: 36px; box-sizing: border-box; z-index: -1;
+  background: var(--pin); border: 2px solid #fff; border-radius: 50% 50% 50% 0; transform: rotate(-45deg);
+  box-shadow: 0 1px 5px rgba(0,0,0,.35);
+}
 
 /* 흡연모드 스위치 */
 .smoke-toggle { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #666; cursor: pointer; }
@@ -244,8 +250,6 @@ body { margin: 0; font-family: system-ui, "Noto Sans KR", sans-serif; }
   font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .rr-cands button.on { border-color: var(--smoking); color: var(--smoking); font-weight: 600; }
-.route-pin.via { background: var(--smoking); }
-.route-pin.end { background: #333; }
 .info .area-list { margin: 4px 0 6px; padding-left: 16px; list-style: disc; font-size: 12px; line-height: 1.5; }
 .info small { font-size: 12px; }
 
