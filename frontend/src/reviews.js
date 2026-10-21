@@ -37,7 +37,10 @@ async function request(path, { method = "GET", body, auth = false } = {}) {
 export const listReviews = (targetType, targetId, address) =>
   request(`?${new URLSearchParams({ target_type: targetType, target_id: targetId, address: address ?? "" })}`);
 
-export const createReview = ({ targetType, targetId, address, rating, content }) =>
+// 후기가 있는 장소·건물 (주소별로 묶음): [{ address, count, rating, target_id }]
+export const listReviewedPlaces = () => request("/places");
+
+export const createReview =({ targetType, targetId, address, rating, content }) =>
   request("", {
     method: "POST",
     auth: true,
