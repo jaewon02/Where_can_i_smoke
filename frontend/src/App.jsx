@@ -849,14 +849,24 @@ export default function App() {
         />
       )}
       <LoginButton className="absolute top-3.5 right-3.5 z-10" panelOpen={Boolean(reviewZone && user)} />
-      {/* 로그인 버튼 아래: 지도를 내 위치로 이동 */}
-      <button type="button" className="my-pos-btn" ref={myPosRef} style={myPosStyle} onClick={goToMyPos} title="내 위치로 이동" aria-label="내 위치로 이동">
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-          <circle cx="12" cy="12" r="6.5" />
-          <circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none" />
-          <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
-        </svg>
-      </button>
+      {/* 오른쪽 아래: 지도를 내 위치로 이동 + 확대(+)·축소(−). 후기 패널이 열리면 묶음째 패널 옆으로 비켜 섬 */}
+      <div className="map-controls" ref={myPosRef} style={myPosStyle}>
+        <button type="button" className="my-pos-btn" onClick={goToMyPos} title="내 위치로 이동" aria-label="내 위치로 이동">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="6.5" />
+            <circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none" />
+            <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+          </svg>
+        </button>
+        <div className="zoom-btns">
+          <button type="button" onClick={() => mapRef.current?.setLevel(mapRef.current.getLevel() - 1, { animate: true })} disabled={zoomLevel <= 1} title="확대" aria-label="지도 확대">
+            +
+          </button>
+          <button type="button" onClick={() => mapRef.current?.setLevel(mapRef.current.getLevel() + 1, { animate: true })} disabled={zoomLevel >= 14} title="축소" aria-label="지도 축소">
+            −
+          </button>
+        </div>
+      </div>
       <LoginDialog /> {/* 임시: 위치는 팀과 정함 */}
       <SmokeModeSlider on={showSmoking} onChange={setShowSmoking} />
       {/* 내 위치 마커 끌기 켜기/끄기: 지도 왼쪽 아래 구석의 작은 슬라이더 */}
