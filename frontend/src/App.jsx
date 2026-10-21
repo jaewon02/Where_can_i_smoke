@@ -341,6 +341,21 @@ export default function App() {
     setListOrigin(null);
   };
 
+  // 내 위치(lat, lng)가 금연구역 안(hits가 있음)이면 마커에 파동과 "금연구역" 라벨을 붙이고, 아니면 뗌
+  const placePulse = (lat, lng, hits) => {
+    if (!hits.length) return pulseRef.current?.setMap(null);
+    if (!pulseRef.current) {
+      const el = document.createElement("div");
+      el.className = "zone-pulse";
+      el.innerHTML = '<span class="ring"></span><span class="ring"></span><span class="ring"></span><span class="base"></span><span class="tag">금연구역</span>';
+      pulseRef.current = new kakao.maps.CustomOverlay({ content: el, xAnchor: 0, yAnchor: 0, zIndex: 3 });
+    }
+    pulseRef.current.getContent().title = hits.map((h) => `${h.label} · ${h.name}`).join(", "); // 마우스를 올리면 어떤 시설인지
+    pulseRef.current.setPosition(new kakao.maps.LatLng(lat, lng));
+    // 이미 지도에 붙어 있으면 다시 붙이지 않음 (다시 붙이면 라벨이 깜빡이며 사라졌다 나타남). 위치만 옮김
+    if (pulseRef.current.getMap() !== mapRef.current) pulseRef.current.setMap(mapRef.current);
+  };
+
   // 내 위치 = 파란 점 마커. 브라우저 GPS는 쓰지 않고 항상 강남역(START_GPS)에서 시작하며,
   // 마우스로 끌어서 놓은 자리가 내 위치가 됨 (새로고침하면 다시 강남역)
   const locate = () => {
@@ -360,7 +375,12 @@ export default function App() {
       title: gpsDragRef.current ? "내 위치 (끌어서 옮길 수 있어요)" : "내 위치",
     });
     // 끌어서 놓으면 그 자리를 내 위치로 (길찾기 출발지가 '내 위치'면 경로도 다시 찾음)
-    kakao.maps.event.addListener(marker, "dragstart", () => pulseRef.current?.setMap(null)); // 끄는 동안은 숨기고, 놓으면 다시 판단
+    // 끄는 동안에도 파동과 라벨이 마커를 따라다니며, 구역에 들어가면 나타나고 벗어나면 사라짐 (받아 둔 주변 시설로 바로 계산)
+    kakao.maps.event.addListener(marker, "drag", () => {
+      if (!flagsRef.current.showSmoking) return;
+      const p = marker.getPosition();
+      placePulse(p.getLat(), p.getLng(), findZonesAt(nearRef.current.rows, p.getLat(), p.getLng()));
+    });
     kakao.maps.event.addListener(marker, "dragend", () => {
       const p = marker.getPosition();
       setMyPos({ status: "ok", lat: p.getLat(), lng: p.getLng() });
@@ -389,17 +409,7 @@ export default function App() {
         }
       }
       if (cancelled) return;
-      const hits = findZonesAt(nearRef.current.rows, myPos.lat, myPos.lng);
-      if (!hits.length) return hide();
-      if (!pulseRef.current) {
-        const el = document.createElement("div");
-        el.className = "zone-pulse";
-        el.innerHTML = '<span class="ring"></span><span class="ring"></span><span class="ring"></span><span class="tag">금연구역</span>';
-        pulseRef.current = new kakao.maps.CustomOverlay({ content: el, xAnchor: 0, yAnchor: 0, zIndex: 3 });
-      }
-      pulseRef.current.getContent().title = hits.map((h) => `${h.label} · ${h.name}`).join(", "); // 마우스를 올리면 어떤 시설인지
-      pulseRef.current.setPosition(new kakao.maps.LatLng(myPos.lat, myPos.lng));
-      pulseRef.current.setMap(mapRef.current);
+      placePulse(myPos.lat, myPos.lng, findZonesAt(nearRef.current.rows, myPos.lat, myPos.lng));
     })();
     return () => {
       cancelled = true;
