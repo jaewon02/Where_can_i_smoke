@@ -14,7 +14,8 @@ const fmtDist = (m) => (m < 1000 ? `${Math.round(m / 10) * 10}m` : `${(m / 1000)
 
 // 지금 지도 화면 안의 흡연구역 목록
 // 검색한 장소(origin)가 있으면 그곳에서 가까운 순
-export default function ZoneList({ zones, origin, selectedId, hidden, onPick, onRoutePick }) {
+// reviewed: 화면 안에서 후기가 있는 장소·건물 (주소별로 묶음), 누르면 그 주소의 후기 패널을 열고 닫음 (openAddress: 지금 열린 주소)
+export default function ZoneList({ zones, origin, selectedId, hidden, onPick, onRoutePick, reviewed, openAddress, onPickReviewed }) {
   const items = origin
     ? zones.map((z) => ({ ...z, dist: distance(origin, z) })).sort((a, b) => a.dist - b.dist)
     : zones;
@@ -34,7 +35,11 @@ export default function ZoneList({ zones, origin, selectedId, hidden, onPick, on
       <ul>
         {items.map((z) => (
           <li key={z.id} className="zl-row">
-            <button className={`zl-item ${z.id === selectedId ? "selected" : ""}`} onClick={() => onPick(z)}>
+            <button
+              className={`zl-item ${z.id === selectedId ? "selected" : ""}`}
+              aria-pressed={z.id === selectedId}
+              onClick={() => onPick(z)}
+            >
               <div className="zl-top">
                 <b>{z.name}</b>
                 {z.dist != null && <span className="zl-dist">{fmtDist(z.dist)}</span>}
@@ -50,6 +55,34 @@ export default function ZoneList({ zones, origin, selectedId, hidden, onPick, on
           </li>
         ))}
       </ul>
+
+      {reviewed.length > 0 && (
+        <>
+          <header className="zl-head">
+            <h3>
+              후기가 있는 장소 <b>{reviewed.length}</b>곳
+            </h3>
+          </header>
+          <ul>
+            {reviewed.map((p) => (
+              <li key={p.address}>
+                <button
+                  className={`zl-item ${p.address === openAddress ? "selected" : ""}`}
+                  aria-pressed={p.address === openAddress}
+                  onClick={() => onPickReviewed(p)}
+                >
+                  <div className="zl-top">
+                    <b>{p.address}</b>
+                  </div>
+                  <small className="zl-addr">
+                    ★ {p.rating} · 후기 {p.count}개
+                  </small>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
     </section>
   );
 }

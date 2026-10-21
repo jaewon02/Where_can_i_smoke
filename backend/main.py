@@ -504,6 +504,23 @@ def list_reviews(
         return [dict(r) for r in rows]
 
 
+@app.get("/api/reviews/places", tags=["reviews"])
+def list_reviewed_places():
+    """후기가 있는 장소·건물을 주소별로 묶은 목록 (주소, 후기 수, 평균 별점, 기록용 번호)
+
+    지도 화면 안에 있는지는 프런트가 주소를 좌표로 바꿔 판단함 (후기 표에는 좌표가 없음)
+    """
+    marks = ",".join("?" * len(ADDRESS_TYPES))
+    with reviews_conn(USERS_DB) as conn:
+        rows = conn.execute(
+            f"SELECT address, COUNT(*) AS count, ROUND(AVG(rating), 1) AS rating, MIN(target_id) AS target_id "
+            f"FROM reviews WHERE target_type IN ({marks}) AND address IS NOT NULL "
+            "GROUP BY address ORDER BY MAX(id) DESC",
+            ADDRESS_TYPES,
+        )
+        return [dict(r) for r in rows]
+
+
 @app.post("/api/reviews", status_code=201, tags=["reviews"])
 def create_review(body: ReviewIn, user: dict = Depends(current_user)):  # noqa: B008 (FastAPI 의존성 주입 표준 방식)
     # 흡연구역은 zones.db에 있는 구역만. 일반 장소는 번호 모양만 확인 (ReviewIn)

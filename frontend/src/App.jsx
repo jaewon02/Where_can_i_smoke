@@ -16,6 +16,7 @@ import LoginDialog from "./LoginDialog.jsx";
 import ZonePanel from "./ZonePanel.jsx";
 import { requireLogin, useAuth } from "./auth.js";
 import { findPlacesAt, LABEL_PRIORITY } from "./nearbyPlaces.js";
+import { listReviewedPlaces } from "./reviews.js";
 
 // 흡연자 기준 색: 피워도 되는 곳(흡연구역)은 초록, 피우면 안 되는 곳(금연구역)은 빨강. styles.css 의 --smoking / --nonsmoking 과 같은 값
 const COLORS = { smoking: "#1f9d55", nonsmoking: "#e5484d" };
@@ -79,6 +80,16 @@ function pinImage(kakao, type) {
   return new kakao.maps.MarkerImage(svgUri(svg), new kakao.maps.Size(34, 46), { offset: new kakao.maps.Point(17, 44) });
 }
 
+// 후기가 있는 장소·건물 핀: 흡연구역 핀과 같은 모양, 검은 바탕 가운데에 흰 글씨 "흡연리뷰" (글씨가 들어가게 조금 크게)
+function reviewPinImage(kakao) {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="44" height="59" viewBox="0 0 40 54">
+    <defs><filter id="s" x="-30%" y="-20%" width="160%" height="150%"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity=".3"/></filter></defs>
+    <path filter="url(#s)" d="M20 2C10 2 2 10 2 20c0 13 18 31 18 31s18-18 18-31C38 10 30 2 20 2z" fill="#111" stroke="#fff" stroke-width="2.5"/>
+    <text x="20" y="20" text-anchor="middle" dominant-baseline="central" fill="#fff" font-size="8.5" font-weight="700"
+      font-family="'Malgun Gothic','Apple SD Gothic Neo',sans-serif" textLength="30" lengthAdjust="spacingAndGlyphs">흡연리뷰</text></svg>`;
+  return new kakao.maps.MarkerImage(svgUri(svg), new kakao.maps.Size(44, 59), { offset: new kakao.maps.Point(22, 57) });
+}
+
 // 주변 금연시설 중심에 얹는 작은 금연 배지
 function badgeImage(kakao) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20">
@@ -93,6 +104,7 @@ export default function App() {
   const { kakao, error } = useKakao();
   const [sidebarOpen, setSidebarOpen] = useState(true); // 왼쪽 검색 사이드바
   const [visibleSmoking, setVisibleSmoking] = useState([]); // 사이드바 목록: 화면 안 흡연구역
+  const [visibleReviewed, setVisibleReviewed] = useState([]); // 사이드바 목록: 화면 안 후기가 있는 장소·건물 (주소별)
   const [listOrigin, setListOrigin] = useState(null); // 목록 거리 기준: 검색으로 고른 장소 (없으면 거리 표시 안 함)
   const [sidebarMode, setSidebarMode] = useState("search"); // "search" | "route"
   const [searchedPlace, setSearchedPlace] = useState(null); // 길찾기 출발지 후보
@@ -110,6 +122,9 @@ export default function App() {
   const flagsRef = useRef({});
   flagsRef.current = { showSmoking, showNon };
   const zonesRef = useRef([]);
+  const reviewedRef = useRef([]); // 후기가 있는 주소 + 좌표 { address, count, rating, target_id, lat, lng }
+  const coordsRef = useRef(new Map()); // 주소 -> 좌표 (카카오 주소 검색은 주소마다 한 번만)
+  const reviewMarkersRef = useRef([]); // 후기가 있는 주소의 핀들
   const mapRef = useRef(null);
   const markersRef = useRef([]);
   const zoneAreasRef = useRef([]); // 직접 등록한 비흡연구역의 범위
@@ -275,10 +290,67 @@ export default function App() {
     zonesRef.current = await fetch(`/api/zones?${qs}`).then((r) => r.json());
     drawZones();
     setVisibleSmoking(zonesRef.current.filter((z) => z.type === "smoking"));
+    filterReviewed();
     // 검색한 장소가 화면 안에 있을 때만 그곳에서의 거리를 보여줌
     const place = searchedPlaceRef.current;
     setListOrigin(place && b.contain(new kakao.maps.LatLng(place.lat, place.lng)) ? place : null);
   };
+
+  // 후기가 있는 주소 중 지금 화면 안에 있는 것만 목록에
+  const filterReviewed = () => {
+    const b = mapRef.current?.getBounds();
+    if (!b) return;
+    setVisibleReviewed(reviewedRef.current.filter((p) => p.lat != null && b.contain(new kakao.maps.LatLng(p.lat, p.lng))));
+  };
+
+  // 후기가 있는 주소 목록을 받아 좌표로 바꿈 (후기 표에 좌표가 없어서). 서버가 꺼져 있으면 목록 없이 넘어감
+  const fetchReviewed = async () => {
+    const rows = await listReviewedPlaces().catch(() => []);
+    const geocoder = new kakao.maps.services.Geocoder();
+    const coordOf = (address) =>
+      coordsRef.current.get(address) ??
+      new Promise((resolve) =>
+        geocoder.addressSearch(address, (res, status) => {
+          const c = status === kakao.maps.services.Status.OK ? { lat: +res[0].y, lng: +res[0].x } : {};
+          coordsRef.current.set(address, c);
+          resolve(c);
+        })
+      );
+    reviewedRef.current = await Promise.all(rows.map(async (r) => ({ ...r, ...(await coordOf(r.address)) })));
+    filterReviewed();
+    // 핀은 주소마다 하나, 누르면 목록에서 고른 것과 같이 후기 패널
+    reviewMarkersRef.current.forEach((m) => m.setMap(null));
+    const image = reviewPinImage(kakao);
+    reviewMarkersRef.current = reviewedRef.current
+      .filter((p) => p.lat != null)
+      .map((p) => {
+        const marker = new kakao.maps.Marker({
+          map: mapRef.current,
+          position: new kakao.maps.LatLng(p.lat, p.lng),
+          title: `${p.address} (★ ${p.rating} · 후기 ${p.count}개)`,
+          image,
+          clickable: true, // 눌러도 지도 클릭(장소 카드)으로 넘어가지 않게
+          zIndex: 1,
+        });
+        kakao.maps.event.addListener(marker, "click", () => pickReviewed(p));
+        return marker;
+      });
+  };
+
+  // 목록에서 후기 있는 주소를 고르면 건물 후기 패널 (같은 주소의 장소·건물 후기를 모아 봄)
+  const pickReviewed = (p) =>
+    requireLogin().then(
+      (user) =>
+        user &&
+        setReviewZone({
+          id: p.target_id,
+          type: "building",
+          label: "건물",
+          name: p.address,
+          address: p.address,
+          note: `후기 ${p.count}개 · ★ ${p.rating}`,
+        })
+    );
 
   // 켜져 있는 종류만 마커/원으로 그림
   const drawZones = () => {
@@ -800,9 +872,15 @@ export default function App() {
     );
   };
 
-  // 사이드바 목록에서 흡연구역을 고르면 그 핀 위에 정보 카드 (목록은 화면 안 구역이라 지도는 그대로)
+  // 사이드바 목록에서 흡연구역을 고르면 그 핀 위에 정보 카드 + 오른쪽 후기 패널 (목록은 화면 안 구역이라 지도는 그대로)
+  // 같은 구역을 다시 누르면 둘 다 닫음 (후기 있는 장소 목록과 같은 열기/닫기)
   const pickZone = (z) => {
+    if (reviewZone && reviewZone.type !== "place" && reviewZone.type !== "building" && reviewZone.id === z.id) {
+      closeClickCard();
+      return setReviewZone(null);
+    }
     openZoneCard(z);
+    requireLogin().then((user) => user && setReviewZone(z));
     if (window.matchMedia("(max-width: 600px)").matches) setSidebarOpen(false);
   };
 
@@ -828,6 +906,11 @@ export default function App() {
     fetchZones();
     fetchFacilities();
   }, [kakao]);
+
+  // 처음, 그리고 후기 패널을 닫을 때마다 (후기를 쓰거나 지웠을 수 있음) 후기 있는 주소를 다시 받음
+  useEffect(() => {
+    if (kakao && !reviewZone) fetchReviewed();
+  }, [kakao, reviewZone]);
 
   // 후기 패널이 열리면 떠 있는 카드가 패널에 가려지지 않게 (패널이 미끄러져 들어온 뒤에 잼)
   useEffect(() => {
@@ -903,6 +986,12 @@ export default function App() {
               hidden={!showSmoking}
               onPick={pickZone}
               onRoutePick={pickRoutePoint}
+              reviewed={visibleReviewed}
+              // 목록은 누를 때마다 열기/닫기 (이미 그 주소의 후기 패널이 열려 있으면 닫음)
+              openAddress={reviewZone?.type === "building" && user ? reviewZone.address : null}
+              onPickReviewed={(p) =>
+                reviewZone?.type === "building" && reviewZone.address === p.address ? setReviewZone(null) : pickReviewed(p)
+              }
             />
           </SearchBox>
           {showSmoking && (
