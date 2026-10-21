@@ -477,11 +477,20 @@ body { margin: 0; font-family: system-ui, "Noto Sans KR", sans-serif; }
 @media (prefers-reduced-motion: reduce) { .gps-drag-toggle, .gps-drag-track, .gps-drag-knob { transition: none; } }
 
 /* 로그인 버튼 아래 [내 위치로] 버튼 */
+/* 오른쪽 아래 지도 버튼 묶음: 위에서부터 내 위치, 확대(+), 축소(−) */
+.map-controls { position: absolute; right: 14px; bottom: 28px; z-index: 10; display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .my-pos-btn {
-  position: absolute; top: 54px; right: 14px; z-index: 10; display: grid; place-items: center;
+  display: grid; place-items: center;
   width: 34px; height: 34px; padding: 0; border: 0; border-radius: 50%; background: #fff; color: #1e88e5;
   box-shadow: 0 1px 4px rgba(0, 0, 0, .3); cursor: pointer;
 }
+.zoom-btns { display: flex; flex-direction: column; width: 34px; border-radius: 17px; background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, .3); overflow: hidden; }
+.zoom-btns button { width: 34px; height: 34px; padding: 0; border: 0; background: transparent; color: #333; font-size: 20px; line-height: 1; cursor: pointer; }
+.zoom-btns button + button { border-top: 1px solid #e3e3e3; }
+.zoom-btns button:hover:not(:disabled) { background: #f2f6fc; }
+.zoom-btns button:active:not(:disabled) { background: #e6eefb; }
+.zoom-btns button:disabled { color: #bbb; cursor: default; }
+.zoom-btns button:focus-visible { outline: 3px solid #1e88e5; outline-offset: -3px; }
 .my-pos-btn:hover { background: #f2f6fc; }
 .my-pos-btn:active { transform: scale(.94); }
 .my-pos-btn:focus-visible { outline: 3px solid #1e88e5; outline-offset: 2px; }
