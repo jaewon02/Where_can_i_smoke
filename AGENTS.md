@@ -13,6 +13,7 @@
 - 프론트엔드: React 18 + Vite, **JavaScript(.jsx)** — TypeScript로 바꾸지 않는다
 - 스타일링/UI: **Tailwind CSS** + **shadcn/ui** — `frontend/`에 설치되어 있지 않으면 설치하고 쓴다 (shadcn은 `components.json`에 `"tsx": false`로 JS 컴포넌트 생성)
 - 백엔드: FastAPI + Python, 패키지 관리는 **uv** (`pyproject.toml` + `uv.lock` 커밋)
+- 린트/포맷(Python): **ruff** — 커밋 때 **pre-commit**이 실행한다
 - DB: **SQLite**
 - 지도: 카카오맵 JavaScript API
 - 배포: 없음. 로컬 시연만 목표로 한다
@@ -43,6 +44,16 @@ npm run dev
 - 브랜치: `main`에서 `feat/…`, `fix/…`, `docs/…`, `chore/…` 브랜치를 따서 작업 → PR → 리뷰 후 머지
 - 커밋 메시지: 한글 자유 서술 (예: `후기 삭제 API 추가`)
 - 에이전트 응답, 코드 주석, 문서 모두 **한국어**
+
+## 린트·포맷 (ruff-pre-commit)
+- Python 코드 품질은 [`ruff-pre-commit`](https://github.com/astral-sh/ruff-pre-commit)(`.pre-commit-config.yaml`)으로 관리한다. ruff는 venv에 따로 설치하지 않는다
+- `.git/hooks/pre-commit`이 없으면 커밋 전에 pre-commit을 설치한다
+  ```bash
+  cd backend
+  uv sync                     # pre-commit은 dev 의존성
+  uv run pre-commit install
+  ```
+- `git commit --no-verify`로 훅을 건너뛰지 않는다
 
 ## 사용자 확인 없이 하지 말 것
 - `main` 브랜치에 직접 커밋·푸시
