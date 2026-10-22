@@ -24,6 +24,7 @@ const COLORS = { smoking: "#1f9d55", nonsmoking: "#e5484d" };
 const AREA_MAX_LEVEL = 3; // 이 레벨 이하로 확대했을 때만 금연구역 범위 표시
 const BADGE_MAX_LEVEL = 2; // 이 레벨 이하로 확대했을 때만 금연구역 배지 표시
 const REVIEW_MAX_LEVEL = 2; // 이 레벨 이하로 확대했을 때만 후기 핀·목록 표시 (최대 확대 1과 그 한 단계 위)
+const ZONE_MAX_LEVEL = 2; // 이 레벨 이하로 확대했을 때만 공공 흡연구역 핀·목록 표시 (후기 핀과 같은 기준)
 // 금연구역은 사용자 눈에는 보이지 않게 하고, 위치(GPS) 판단 등 내부에서만 쓸 예정. 개발 중 확인할 때만 true로
 const SHOW_NONSMOKING_AREAS = false;
 
@@ -128,6 +129,7 @@ export default function App() {
   const reviewMarkersRef = useRef([]); // 후기가 있는 주소의 핀들
   const mapRef = useRef(null);
   const markersRef = useRef([]);
+  const smokingMarkersRef = useRef([]); // markersRef 중 공공 흡연구역 핀 (확대 레벨에 따라 보이고 숨김)
   const zoneAreasRef = useRef([]); // 직접 등록한 비흡연구역의 범위
   const facilityAreasRef = useRef([]); // 규칙으로 찾은 금연시설의 범위
   const nearRef = useRef({ lat: null, lng: null, rows: [] }); // 내 위치 주변에서 받아 둔 시설 (금연구역 판단용)
@@ -367,7 +369,7 @@ export default function App() {
     drawAreas();
     markersRef.current = zones.map((z) => {
       const marker = new kakao.maps.Marker({
-        map,
+        map: z.type === "smoking" && map.getLevel() > ZONE_MAX_LEVEL ? null : map, // 공공 흡연구역은 많이 확대했을 때만
         position: new kakao.maps.LatLng(z.lat, z.lng),
         image: z.type === "smoking" ? zoneMarkerImage(kakao, zoneKind(z.note)) : pinImage(kakao, z.type), // 흡연구역은 종류별 아이콘
         title: z.name,
@@ -389,6 +391,7 @@ export default function App() {
       });
       return marker;
     });
+    smokingMarkersRef.current = markersRef.current.filter((_, i) => zones[i].type === "smoking");
   };
 
   // 검색 결과로 지도 이동 (이동 후 idle 이벤트로 주변 구역이 다시 불러와짐)
@@ -910,9 +913,10 @@ export default function App() {
     if (kakao && !reviewZone) fetchReviewed();
   }, [kakao, reviewZone]);
 
-  // 흡연모드이고 많이 확대했을 때만 후기 핀을 지도에 올림
+  // 흡연모드이고 많이 확대했을 때만 후기 핀을 지도에 올림. 공공 흡연구역 핀도 확대·축소 즉시 보이고 숨김
   useEffect(() => {
     reviewMarkersRef.current.forEach((m) => m.setMap(showSmoking && zoomLevel <= REVIEW_MAX_LEVEL ? mapRef.current : null));
+    smokingMarkersRef.current.forEach((m) => m.setMap(zoomLevel <= ZONE_MAX_LEVEL ? mapRef.current : null));
   }, [zoomLevel]);
 
   // 후기 패널이 열리면 떠 있는 카드가 패널에 가려지지 않게 (패널이 미끄러져 들어온 뒤에 잼)
@@ -998,6 +1002,7 @@ export default function App() {
                 selectedId={selectedId}
                 onPick={pickZone}
                 reviewed={visibleReviewed}
+                zoneHidden={zoomLevel > ZONE_MAX_LEVEL}
                 reviewHidden={zoomLevel > REVIEW_MAX_LEVEL}
                 // 목록은 누를 때마다 열기/닫기 (이미 그 주소의 후기 패널이 열려 있으면 닫음)
                 openAddress={reviewZone?.type === "building" && user ? reviewZone.address : null}
