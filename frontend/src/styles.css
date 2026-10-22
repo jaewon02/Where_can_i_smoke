@@ -223,7 +223,6 @@ body { margin: 0; font-family: system-ui, "Noto Sans KR", sans-serif; }
 }
 .route-pin.start { --pin: #2373F4; }
 .route-pin.end { --pin: #D90000; }
-.route-pin.via { --pin: #000; }
 .route-pin::before {
   content: ""; position: absolute; top: 0; left: 0; width: 36px; height: 36px; box-sizing: border-box; z-index: -1;
   background: var(--pin); border: 2px solid #fff; border-radius: 50% 50% 50% 0; transform: rotate(-45deg);
@@ -244,16 +243,6 @@ body { margin: 0; font-family: system-ui, "Noto Sans KR", sans-serif; }
 .smoke-toggle:focus-within .st-track { outline: 3px solid #90caf9; outline-offset: 1px; }
 @media (prefers-reduced-motion: reduce) { .st-track, .st-thumb { transition: none; } }
 
-/* 흡연모드 경유지 */
-.rr-via { margin-top: 6px; font-size: 13px; color: #333; }
-.rr-via.none { color: #888; }
-.rr-via-badge { display: inline-block; padding: 1px 7px; border-radius: 9px; background: var(--smoking); color: #fff; font-size: 11px; font-weight: 700; }
-.rr-cands { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-.rr-cands button {
-  max-width: 100%; padding: 4px 10px; border: 1.5px solid #ddd; border-radius: 14px; background: #fff;
-  font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.rr-cands button.on { border-color: var(--smoking); color: var(--smoking); font-weight: 600; }
 .info .area-list { margin: 4px 0 6px; padding-left: 16px; list-style: disc; font-size: 12px; line-height: 1.5; }
 .info small { font-size: 12px; }
 

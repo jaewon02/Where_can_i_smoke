@@ -148,7 +148,6 @@ export default function RoutePanel({ kakao, getCenter, myPos, start, end, setSta
   const [option, setOption] = useState(0); // 대중교통: 여러 경로 중 몇 번째를 볼지
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [viaPick, setViaPick] = useState({ key: null, id: null }); // 직접 고른 경유 흡연구역
   const reqRef = useRef(0);
 
   // "내 위치"는 실제 좌표로 바꿔서 사용
@@ -161,10 +160,6 @@ export default function RoutePanel({ kakao, getCenter, myPos, start, end, setSta
     if (usesMe && myPos.status === "idle") onLocate();
   }, [usesMe]);
 
-  // 직접 고른 경유지는 같은 출발/도착·이동수단일 때만 유효 (없으면 서버가 가장 덜 돌아가는 곳을 고름)
-  const routeKey = `${from?.lat},${from?.lng},${to?.lat},${to?.lng},${smoking},${mode}`;
-  const viaId = viaPick.key === routeKey ? viaPick.id : null;
-
   // 출발/도착이 모두 정해지면 바로 경로 찾기
   useEffect(() => {
     const reqId = ++reqRef.current;
@@ -175,10 +170,6 @@ export default function RoutePanel({ kakao, getCenter, myPos, start, end, setSta
     if (!from || !to) return setLoading(false);
     setLoading(true);
     const qs = new URLSearchParams({ from_lat: from.lat, from_lng: from.lng, to_lat: to.lat, to_lng: to.lng, mode });
-    if (smoking) {
-      qs.set("smoking", "true");
-      if (viaId) qs.set("via_zone_id", viaId);
-    }
     fetch(`/api/route?${qs}`)
       .then(async (res) => {
         const data = await res.json();
@@ -189,16 +180,16 @@ export default function RoutePanel({ kakao, getCenter, myPos, start, end, setSta
         if (reqId !== reqRef.current) return;
         setRoute(data);
         const first = data.options?.[0];
-        onShowRoute(first?.path ?? data.path, from, to, data.via, first?.segments);
+        onShowRoute(first?.path ?? data.path, from, to, first?.segments);
       })
       .catch((e) => reqId === reqRef.current && setError(e.message))
       .finally(() => reqId === reqRef.current && setLoading(false));
-  }, [from?.lat, from?.lng, to?.lat, to?.lng, smoking, viaId, mode]);
+  }, [from?.lat, from?.lng, to?.lat, to?.lng, mode]);
 
   const pickOption = (i) => {
     setOption(i);
     const o = route.options[i];
-    onShowRoute(o.path, from, to, null, o.segments);
+    onShowRoute(o.path, from, to, o.segments);
   };
 
   const swap = () => {
@@ -291,32 +282,6 @@ export default function RoutePanel({ kakao, getCenter, myPos, start, end, setSta
                 </div>
               )}
 
-              {smoking && route.smoking_supported === false && (
-                <div className="rr-via none">대중교통 길찾기는 경유지를 지원하지 않아 흡연모드가 적용되지 않아요.</div>
-              )}
-              {smoking && route.smoking_supported !== false && route.via && (
-                <div className="rr-via">
-                  <span className="rr-via-badge">흡연</span> {route.via.name} 들렀다 가요
-                </div>
-              )}
-              {smoking && route.smoking_supported !== false && !route.via && (
-                <div className="rr-via none">가는 길 근처에 흡연구역이 없어서 바로 가는 길로 안내해요.</div>
-              )}
-              {smoking && route.candidates?.length > 1 && (
-                <div className="rr-cands" role="radiogroup" aria-label="들를 흡연구역 바꾸기">
-                  {route.candidates.map((c) => (
-                    <button
-                      key={c.id}
-                      role="radio"
-                      aria-checked={c.id === route.via?.id}
-                      className={c.id === route.via?.id ? "on" : ""}
-                      onClick={() => setViaPick({ key: routeKey, id: c.id })}
-                    >
-                      {c.name}
-                    </button>
-                  ))}
-                </div>
-              )}
               <div className="rr-foot">
                 <small className="muted">경로 정보: {mode === "car" ? "카카오모빌리티" : "카카오맵"}</small>
               </div>

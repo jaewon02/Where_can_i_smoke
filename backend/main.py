@@ -133,43 +133,6 @@ def straight_m(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
     return 2 * 6371000 * math.asin(math.sqrt(h))
 
 
-MAX_DETOUR_M = (
-    1500  # 흡연모드: 직선 기준으로 이보다 더 돌아가야 하는 흡연구역은 후보에서 제외
-)
-NEAR_M = 50  # 출발지·도착지에서 이 거리 안의 흡연구역은 경유지 후보에서 제외
-
-
-def smoking_candidates(
-    from_lat: float, from_lng: float, to_lat: float, to_lng: float, limit: int = 3
-) -> list[dict]:
-    """출발→도착 사이에 들르기 좋은 흡연구역 (직선 기준 덜 돌아가는 순)"""
-    pad = 0.015  # 약 1.5km
-    with get_conn(ZONES_DB) as conn:
-        rows = conn.execute(
-            "SELECT id, name, lat, lng FROM zones WHERE type = 'smoking'"
-            " AND lat BETWEEN ? AND ? AND lng BETWEEN ? AND ?",
-            (
-                min(from_lat, to_lat) - pad,
-                max(from_lat, to_lat) + pad,
-                min(from_lng, to_lng) - pad,
-                max(from_lng, to_lng) + pad,
-            ),
-        ).fetchall()
-    direct = straight_m(from_lat, from_lng, to_lat, to_lng)
-    out = []
-    for z in rows:
-        to_start = straight_m(from_lat, from_lng, z["lat"], z["lng"])
-        to_end = straight_m(z["lat"], z["lng"], to_lat, to_lng)
-        if (
-            min(to_start, to_end) < NEAR_M
-        ):  # 출발지·도착지가 이미 흡연구역이면 들를 필요 없음
-            continue
-        detour = to_start + to_end - direct
-        if detour <= MAX_DETOUR_M:
-            out.append({**dict(z), "detour_m": round(detour)})
-    return sorted(out, key=lambda z: z["detour_m"])[:limit]
-
-
 def _load_usage() -> dict:
     """{"date": "2026-10-19", "walk": 3, "transit": 2, "car": 2} — 날짜가 바뀌면 0부터"""
     today = date.today().isoformat()
@@ -234,10 +197,8 @@ ROUTE_ERRORS = {
 }
 
 
-async def walk_route(key: str, frm: tuple, to: tuple, via: dict | None) -> dict:
+async def walk_route(key: str, frm: tuple, to: tuple) -> dict:
     params = {"start_x": frm[1], "start_y": frm[0], "end_x": to[1], "end_y": to[0]}
-    if via:
-        params.update(via_x=via["lng"], via_y=via["lat"])
     data = await _kakao_get(KAKAO_WALK_URL, key, params)
     if data.get("status") != "OK":
         raise HTTPException(
@@ -323,14 +284,12 @@ async def transit_route(key: str, frm: tuple, to: tuple) -> dict:
     }
 
 
-async def car_route(key: str, frm: tuple, to: tuple, via: dict | None) -> dict:
+async def car_route(key: str, frm: tuple, to: tuple) -> dict:
     params = {
         "origin": f"{frm[1]},{frm[0]}",
         "destination": f"{to[1]},{to[0]}",
         "priority": "RECOMMEND",
     }
-    if via:
-        params["waypoints"] = f"{via['lng']},{via['lat']}"
     data = await _kakao_get(KAKAO_CAR_URL, key, params)
     route = (data.get("routes") or [{}])[0]
     if route.get("result_code") != 0:
@@ -375,14 +334,8 @@ async def find_route(
     mode: Literal["walk", "transit", "car"] = Query(
         "walk", description="도보 / 대중교통 / 자동차"
     ),
-    smoking: bool = Query(
-        False, description="흡연모드: 중간에 흡연구역을 들렀다 감 (도보·자동차만)"
-    ),
-    via_zone_id: int | None = Query(
-        None, description="흡연모드에서 들를 흡연구역을 직접 고를 때"
-    ),
 ):
-    """출발 → (흡연구역) → 도착 경로. path는 [[lat, lng], ...]"""
+    """출발 → 도착 경로. path는 [[lat, lng], ...]"""
     key = os.getenv("KAKAO_REST_API_KEY", "").strip()
     if not key:
         raise HTTPException(
@@ -398,34 +351,18 @@ async def find_route(
     if dist < 10:
         raise HTTPException(422, "출발지와 도착지가 너무 가까워요")
 
-    # 흡연모드: 대중교통 API는 경유지를 지원하지 않아 도보·자동차에만 적용
-    via = None
-    candidates: list[dict] = []
-    if smoking and mode != "transit":
-        candidates = smoking_candidates(from_lat, from_lng, to_lat, to_lng)
-        via = (
-            next((c for c in candidates if c["id"] == via_zone_id), None)
-            if via_zone_id
-            else None
-        )
-        via = via or (candidates[0] if candidates else None)
-
     # 좌표를 약 10m 단위로 반올림해서 같은 요청은 캐시로 응답
     frm, to = (from_lat, from_lng), (to_lat, to_lng)
-    cache_key = (mode, *(round(v, 4) for v in (*frm, *to)), via and via["id"])
+    cache_key = (mode, *(round(v, 4) for v in (*frm, *to)))
     if cache_key not in _route_cache:
         _count_call(mode)
         if mode == "walk":
-            _route_cache[cache_key] = await walk_route(key, frm, to, via)
+            _route_cache[cache_key] = await walk_route(key, frm, to)
         elif mode == "transit":
             _route_cache[cache_key] = await transit_route(key, frm, to)
         else:
-            _route_cache[cache_key] = await car_route(key, frm, to, via)
-    result = {**_route_cache[cache_key], "mode": mode, "via": via}
-    if smoking:
-        result["candidates"] = candidates  # 다른 흡연구역으로 바꿀 수 있게
-        result["smoking_supported"] = mode != "transit"
-    return result
+            _route_cache[cache_key] = await car_route(key, frm, to)
+    return {**_route_cache[cache_key], "mode": mode}
 
 
 # ---------- 회원가입/로그인 (도우미 함수는 auth.py) ----------
