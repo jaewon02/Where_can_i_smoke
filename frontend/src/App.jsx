@@ -55,12 +55,17 @@ const START_GPS = { lat: 37.417549281400404, lng: 126.9778486982369 }; // 메가
 
 const svgUri = (svg) => "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
 
-// 내 위치 마커: 흰 테두리 파란 점 + 연한 파란 테두리
-function myLocImage(kakao) {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 34 34">
-    <circle cx="17" cy="17" r="14" fill="#1e88e5" fill-opacity=".22"/>
-    <circle cx="17" cy="17" r="8.5" fill="#1e88e5" stroke="#fff" stroke-width="3"/></svg>`;
-  return new kakao.maps.MarkerImage(svgUri(svg), new kakao.maps.Size(34, 34), { offset: new kakao.maps.Point(17, 17) });
+// 내 위치 마커: 흰 테두리 파란 점 + 연한 파란 테두리. wave면 둘레에 퍼져 나가는 파란 파동 2겹 (동작 줄이기 설정이면 생략)
+function myLocImage(kakao, wave) {
+  const ring = (begin) => `<circle cx="32" cy="32" r="14" fill="#1e88e5" fill-opacity="0">
+    <animate attributeName="r" values="14;31" dur="2s" begin="${begin}" repeatCount="indefinite"/>
+    <animate attributeName="fill-opacity" values=".35;0" dur="2s" begin="${begin}" repeatCount="indefinite"/></circle>`;
+  const waves = wave && !matchMedia("(prefers-reduced-motion: reduce)").matches ? ring("0s") + ring("1s") : "";
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">${waves}
+    <circle cx="32" cy="32" r="14" fill="#1e88e5" fill-opacity=".22"/>
+    <circle cx="32" cy="32" r="8.5" fill="#1e88e5" stroke="#fff" stroke-width="3"/></svg>`;
+  // 누르거나 끌 수 있는 범위는 파동을 빼고 예전 크기(반지름 17) 그대로
+  return new kakao.maps.MarkerImage(svgUri(svg), new kakao.maps.Size(64, 64), { offset: new kakao.maps.Point(32, 32), shape: "circle", coords: "32,32,17" });
 }
 
 // 담배 그림 (흰색). 필터부분은 반투명
@@ -479,7 +484,7 @@ export default function App() {
 
   // 내 위치(lat, lng)가 금연구역 안(hits가 있음)이면 마커에 파동과 "금연구역" 라벨을 붙이고, 아니면 뗌
   const placePulse = (lat, lng, hits) => {
-    if (!hits.length || mapRef.current.getLevel() > ALERT_MAX_LEVEL) return pulseRef.current?.setMap(null); // 넓게 볼 때는 경보를 띄우지 않음
+    if (!hits.length || mapRef.current.getLevel() > ALERT_MAX_LEVEL) return hidePulse(); // 넓게 볼 때는 경보를 띄우지 않음
     if (!pulseRef.current) {
       const el = document.createElement("div");
       el.className = "zone-pulse";
@@ -490,6 +495,18 @@ export default function App() {
     pulseRef.current.setPosition(new kakao.maps.LatLng(lat, lng));
     // 이미 지도에 붙어 있으면 다시 붙이지 않음 (다시 붙이면 라벨이 깜빡이며 사라졌다 나타남). 위치만 옮김
     if (pulseRef.current.getMap() !== mapRef.current) pulseRef.current.setMap(mapRef.current);
+    setMyWave(false);
+  };
+  const hidePulse = () => {
+    pulseRef.current?.setMap(null);
+    setMyWave(true);
+  };
+  // 금연구역 경보(빨간 파동)와 겹치지 않게, 경보가 떠 있는 동안은 내 위치의 파란 파동을 끔. 바뀔 때만 이미지를 갈아 끼움
+  const setMyWave = (wave) => {
+    const marker = myLocRef.current;
+    if (!marker || marker.wave === wave) return;
+    marker.wave = wave;
+    marker.setImage(myLocImage(kakao, wave));
   };
 
   // 내 위치 = 파란 점 마커. 브라우저 GPS는 쓰지 않고 항상 강남역(START_GPS)에서 시작하며,
@@ -504,7 +521,7 @@ export default function App() {
     const marker = new kakao.maps.Marker({
       map: mapRef.current,
       position: new kakao.maps.LatLng(START_GPS.lat, START_GPS.lng),
-      image: myLocImage(kakao),
+      image: myLocImage(kakao, true),
       draggable: gpsDragRef.current,
       clickable: true, // 눌러도 지도 클릭(장소 카드)으로 넘어가지 않게
       zIndex: 4,
@@ -521,13 +538,13 @@ export default function App() {
       const p = marker.getPosition();
       setMyPos({ status: "ok", lat: p.getLat(), lng: p.getLng() });
     });
+    marker.wave = true;
     myLocRef.current = marker;
   };
 
   // 흡연모드를 켰을 때만: 내 위치가 금연구역 안이면 마커에 빨간 경고 파동과 "금연구역" 표시 (구역 밖이면 아무것도 없음)
   useEffect(() => {
-    const hide = () => pulseRef.current?.setMap(null);
-    if (!kakao || !showSmoking || myPos.status !== "ok" || !mapRef.current) return hide();
+    if (!kakao || !showSmoking || myPos.status !== "ok" || !mapRef.current) return hidePulse();
     let cancelled = false;
     (async () => {
       const KX = 111_320 * Math.cos((myPos.lat * Math.PI) / 180);
