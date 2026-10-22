@@ -273,7 +273,8 @@ export default function RoutePanel({ kakao, getCenter, myPos, start, end, setSta
         <div className={`route-result ${error ? "error" : ""}`} aria-live="polite">
           {loading && <p className="route-msg">경로를 찾는 중…</p>}
           {error && <p className="route-msg error-text">{error}</p>}
-          {route && (
+          {/* 출발지·도착지를 지운 직후에는 이전 경로가 한 번 남아 있으므로, 둘 다 있을 때만 그림 (없으면 null.name 으로 화면 전체가 멈춤) */}
+          {route && from && to && (
             <>
               <div className="rr-dest">
                 {from.name} → {to.name}
