@@ -23,8 +23,10 @@ import { boundsAround, mostReviewed, nearestSpot, sameSpot } from "./recommend.j
 const COLORS = { smoking: "#1f9d55", nonsmoking: "#e5484d" };
 // 카카오 지도 레벨은 숫자가 작을수록 많이 확대한 것. 화면이 복잡해지지 않게 확대했을 때만 금연구역을 보여줌
 const AREA_MAX_LEVEL = 3; // 이 레벨 이하로 확대했을 때만 금연구역 범위 표시
-const BADGE_MAX_LEVEL = 2; // 이 레벨 이하로 확대했을 때만 금연구역 배지 표시
-const REVIEW_MAX_LEVEL = 2; // 이 레벨 이하로 확대했을 때만 후기 핀·목록 표시 (최대 확대 1과 그 한 단계 위)
+const BADGE_MAX_LEVEL = 3; // 이 레벨 이하로 확대했을 때만 금연구역 배지 표시
+const ZONE_MAX_LEVEL = 3; // 이 레벨 이하로 확대했을 때만 공공 흡연구역 핀·목록 표시
+const ALERT_MAX_LEVEL = 3; // 이 레벨 이하로 확대했을 때만 내 위치의 금연구역 경보(파동·라벨) 표시
+const REVIEW_MAX_LEVEL = 3; // 이 레벨 이하로 확대했을 때만 후기 핀·목록 표시
 // 금연구역은 사용자 눈에는 보이지 않게 하고, 위치(GPS) 판단 등 내부에서만 쓸 예정. 개발 중 확인할 때만 true로
 const SHOW_NONSMOKING_AREAS = false;
 
@@ -209,7 +211,7 @@ export default function App() {
     const showAreas = SHOW_NONSMOKING_AREAS && map.getLevel() <= AREA_MAX_LEVEL; // 넓게 볼 때는 금연구역을 그리지 않음
     const areas = showAreas ? [...zoneAreasRef.current, ...facilityAreasRef.current] : [];
     // 지도를 움직여도 범위가 그대로면 다시 그리지 않음 (열려 있는 말풍선이 닫히지 않도록)
-    // 배지는 많이 확대했을 때(레벨 2 이하)만 표시. 그보다 넓게 볼 때는 범위만 보여줌 (배지가 너무 빽빽해서)
+    // 배지는 많이 확대했을 때(레벨 3 이하)만 표시. 그보다 넓게 볼 때는 범위만 보여줌 (배지가 너무 빽빽해서)
     const showBadges = map.getLevel() <= BADGE_MAX_LEVEL;
     const key = JSON.stringify([showBadges, areas.map((a) => [a.lat, a.lng, a.name])]);
     if (key === areasKeyRef.current) return;
@@ -376,7 +378,7 @@ export default function App() {
     const map = mapRef.current;
     const { showSmoking, showNon } = flagsRef.current;
     const zones = zonesRef.current.filter((z) => (z.type === "smoking" ? showSmoking : showNon));
-    markersRef.current.forEach((m) => m.setMap(null));
+    markersRef.current.forEach(({ marker }) => marker.setMap(null));
     // 비흡연구역은 반경(radius_m)만큼의 범위를 금연 범위에 포함
     zoneAreasRef.current = zones
       .filter((z) => z.type === "nonsmoking" && z.radius_m)
@@ -384,7 +386,7 @@ export default function App() {
     drawAreas();
     markersRef.current = zones.map((z) => {
       const marker = new kakao.maps.Marker({
-        map,
+        map: z.type === "smoking" && map.getLevel() > ZONE_MAX_LEVEL ? null : map, // 흡연구역 핀은 많이 확대했을 때만
         position: new kakao.maps.LatLng(z.lat, z.lng),
         image: z.type === "smoking" ? zoneMarkerImage(kakao, zoneKind(z.note)) : pinImage(kakao, z.type), // 흡연구역은 종류별 아이콘
         title: z.name,
@@ -404,8 +406,16 @@ export default function App() {
         infoRef.current.setContent(el);
         infoRef.current.open(map, marker);
       });
-      return marker;
+      return { marker, smoking: z.type === "smoking" };
     });
+  };
+
+  // 흡연구역 핀 보이기: 흡연모드이고 많이 확대했을 때만 (확대·축소 즉시 반영)
+  const syncZoneMarkers = () => {
+    const map = mapRef.current;
+    if (!map) return;
+    const zoomedIn = map.getLevel() <= ZONE_MAX_LEVEL;
+    markersRef.current.forEach(({ marker, smoking }) => smoking && marker.setMap(zoomedIn ? map : null));
   };
 
   // 검색 결과로 지도 이동 (이동 후 idle 이벤트로 주변 구역이 다시 불러와짐)
@@ -453,7 +463,7 @@ export default function App() {
 
   // 내 위치(lat, lng)가 금연구역 안(hits가 있음)이면 마커에 파동과 "금연구역" 라벨을 붙이고, 아니면 뗌
   const placePulse = (lat, lng, hits) => {
-    if (!hits.length) return pulseRef.current?.setMap(null);
+    if (!hits.length || mapRef.current.getLevel() > ALERT_MAX_LEVEL) return pulseRef.current?.setMap(null); // 넓게 볼 때는 경보를 띄우지 않음
     if (!pulseRef.current) {
       const el = document.createElement("div");
       el.className = "zone-pulse";
@@ -524,7 +534,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [kakao, showSmoking, myPos.status, myPos.lat, myPos.lng]);
+  }, [kakao, showSmoking, myPos.status, myPos.lat, myPos.lng, zoomLevel > ALERT_MAX_LEVEL]);
 
   // [내 위치로] 버튼: 지도를 내 위치 마커(끌어 옮겼으면 옮긴 자리)로 이동
   // 왼쪽 사이드바가 지도를 덮고 있으면 그만큼 비켜서, 보이는 영역의 가운데에 마커가 오게 함
@@ -933,6 +943,7 @@ export default function App() {
   // 흡연모드이고 많이 확대했을 때만 후기 핀을 지도에 올림 (추천된 1곳은 예외)
   useEffect(() => {
     syncReviewMarkers();
+    syncZoneMarkers();
   }, [zoomLevel]);
 
   // 후기 패널이 열리면 떠 있는 카드가 패널에 가려지지 않게 (패널이 미끄러져 들어온 뒤에 잼)
@@ -1101,7 +1112,8 @@ export default function App() {
             )}
             {showSmoking && (
               <ZoneList
-                zones={visibleSmoking}
+                zones={zoomLevel > ZONE_MAX_LEVEL ? [] : visibleSmoking}
+                zoneHidden={zoomLevel > ZONE_MAX_LEVEL}
                 origin={listOrigin}
                 // 패널이 열린 구역, 없으면 지도 핀 카드를 띄운 구역을 선택 표시
                 selectedId={reviewZone?.type === "smoking" ? reviewZone.id : selectedId}
