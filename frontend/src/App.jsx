@@ -44,14 +44,14 @@ function extentM(f) {
   return Math.max((x1 - x0) * 111320 * Math.cos((y0 * Math.PI) / 180), (y1 - y0) * 111320);
 }
 
-// 내 위치 시작점: 항상 강남역 (앱을 켜면 이 자리에 내 위치 마커가 뜨고, 마우스로 끌어 옮길 수 있음). 지도 첫 화면 중심도 여기
 // 내 위치가 금연구역 안이면 마커에 붙이는 경고 파동. 주변 시설은 넉넉하게 받아 두고, 많이 움직였을 때만 다시 받음
 const NEAR_FETCH_LAT = 0.012; // 위도 방향 약 1.3km (넓은 공원 구역까지 포함하려고 넉넉하게)
 const NEAR_FETCH_LNG = 0.015; // 경도 방향 약 1.3km
 const NEAR_REFRESH_M = 400; // 받아 둔 중심에서 이만큼 벗어나면 다시 받음
 
-// const START_GPS = { lat: 37.49799161931449, lng: 127.02770445495885 }; // 강남역
 const START_GPS = { lat: 37.417549281400404, lng: 126.9778486982369 }; // 메가존 클라우드 과천
+// const START_GPS = { lat: 37.49799161931449, lng: 127.02770445495885 }; // 강남역 (테스트 용도)
+// const START_GPS = { lat: 37.513328086879035, lng: 127.10404258653621 }; // 잠실 롯데타워 (테스트 용도)
 
 const svgUri = (svg) => "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
 
@@ -120,6 +120,8 @@ export default function App() {
   const [selectedId, setSelectedId] = useState(null); // 정보 카드를 띄운 흡연구역 (사이드바 목록 선택 표시)
   const { user } = useAuth();
   const [reviewZone, setReviewZone] = useState(null); // 오른쪽 후기 패널에 보여줄 흡연구역 또는 일반 장소 (카드에 있던 정보)
+  const reviewZoneRef = useRef(reviewZone); // 지도 카드 버튼(DOM 이벤트)에서 지금 열린 패널을 알려고
+  reviewZoneRef.current = reviewZone;
   const panelOpen = Boolean(reviewZone && (user || reviewZone.type === "smoking")); // 흡연구역 패널은 후기가 없어 로그인 없이도 엶
   const [myPosRef, myPosStyle] = usePanelOffset(panelOpen); // 후기 패널이 열리면 [내 위치로]도 패널 옆으로 (좁은 화면은 그대로)
   const [showSmoking, setShowSmoking] = useState(true); // 흡연모드 (지도 왼쪽 위 버튼, 처음엔 켜짐). 켜면 흡연구역 핀이 보이고, 길찾기에서 흡연구역을 들르고, 금연 안내와 오늘의 담배가 나타남 (꺼져 있으면 안 보임)
@@ -330,7 +332,7 @@ export default function App() {
     reviewedRef.current = await Promise.all(rows.map(async (r) => ({ ...r, ...(await coordOf(r.address)) })));
     setReviewedList(reviewedRef.current);
     filterReviewed();
-    // 핀은 주소마다 하나 (후기 패널은 목록에서만 엶)
+    // 핀은 주소마다 하나. 누르면 그 주소의 건물 목록 카드 (후기 패널은 카드의 [후기 보기]로 엶)
     reviewMarkersRef.current.forEach(({ marker }) => marker.setMap(null));
     const image = reviewPinImage(kakao);
     reviewMarkersRef.current = reviewedRef.current
@@ -343,7 +345,7 @@ export default function App() {
           clickable: true, // 눌러도 지도 클릭(장소 카드)으로 넘어가지 않게
           zIndex: 1,
         });
-        kakao.maps.event.addListener(marker, "click", () => pickReviewed(p));
+        kakao.maps.event.addListener(marker, "click", () => openReviewedCard(p));
         return { marker, address: p.address };
       });
     syncReviewMarkers();
@@ -357,6 +359,20 @@ export default function App() {
     reviewMarkersRef.current.forEach(({ marker, address }) =>
       marker.setMap(flagsRef.current.showSmoking && (zoomedIn || recommendAddrsRef.current.includes(address)) ? map : null)
     );
+  };
+
+  // 후기 핀을 누르면 지도에서 그 건물을 누를 때와 같은 건물 목록 카드를 핀 위에 띄움
+  // 그 주소에 카카오 장소가 없으면 주소만으로 카드를 만듦 (가게 목록엔 그 주소 한 줄)
+  const openReviewedCard = (p) => {
+    infoRef.current.close();
+    closeClickCard();
+    const reqId = clickReqRef.current;
+    findPlacesAt(kakao, p.lat, p.lng, 50).then(({ places, building }) => {
+      if (reqId !== clickReqRef.current) return; // 그새 다른 곳을 눌렀으면 무시
+      const same = places.filter((x) => x.groupCode !== "BUS" && (x.roadAddress || x.jibunAddress) === p.address);
+      const clicked = same[0] ?? { id: p.target_id, name: building?.name || p.address, categoryPath: "", roadAddress: p.address, jibunAddress: "" };
+      showBuildingList({ ...clicked, lat: p.lat, lng: p.lng, onPin: true }, same, building);
+    });
   };
 
   // 목록에서 후기 있는 주소를 고르면 건물 후기 패널 (같은 주소의 장소·건물 후기를 모아 봄)
@@ -695,6 +711,16 @@ export default function App() {
     el.title = BADGE[kind].title;
   };
 
+  // 카드의 [후기 보기]/[정보 보기]: 같은 대상의 패널이 열려 있으면 닫고, 아니면 엶 (후기는 로그인 후)
+  // 건물 후기는 주소로 묶이므로 건물은 주소로, 나머지는 번호로 같은 대상인지 봄
+  const toggleReviewPanel = (target, needLogin = true) => {
+    const cur = reviewZoneRef.current;
+    const key = (z) => (z.type === "building" ? z.address : z.id);
+    if (cur?.type === target.type && key(cur) === key(target)) return setReviewZone(null);
+    if (!needLogin) return setReviewZone(target);
+    requireLogin().then((user) => user && setReviewZone(target));
+  };
+
   // 카드 안을 누르거나 스크롤할 때 지도 클릭·확대로 다시 처리되지 않도록 막음
   const stopMapEvents = (el) =>
     ["mousedown", "touchstart", "touchmove", "click", "dblclick", "wheel"].forEach((t) =>
@@ -716,6 +742,7 @@ export default function App() {
     );
     const el = document.createElement("div");
     el.className = "click-card bl-card";
+    if (clicked.onPin) el.classList.add("cc-on-pin"); // 후기 핀 위에 띄울 때는 핀을 가리지 않게 더 위로
     el.innerHTML = `
       <button class="cc-close" aria-label="닫기">✕</button>
       <div class="cc-head"><b class="cc-title"></b></div>
@@ -732,7 +759,7 @@ export default function App() {
     q(".cc-addr").textContent = key;
     // 건물 후기: 도로명주소로 묶어서, 같은 건물이면 어느 가게를 눌러 들어와도 같은 후기 목록 (번호는 처음 누른 장소, 기록용)
     const reviewTarget = { id: clicked.id, type: "building", name: title, address: key, note: `${list.length}곳` };
-    q(".cc-reviews").onclick = () => requireLogin().then((user) => user && setReviewZone(reviewTarget));
+    q(".cc-reviews").onclick = () => toggleReviewPanel(reviewTarget);
     const ul = q(".bl-list");
     // 가게 카드를 접을 때는 펼칠 때를 거꾸로 돌려 왼쪽으로 밀어 넣고 사라지게 함 (다른 가게로 바꿀 때는 겹치지 않게 바로 뺌)
     const slideClose = (d) => {
@@ -853,11 +880,11 @@ export default function App() {
       address: road || place.jibunAddress,
       note: place.phone ? `☎ ${place.phone}` : "",
     };
-    q(".cc-reviews").onclick = () => requireLogin().then((user) => user && setReviewZone(reviewTarget));
+    q(".cc-reviews").onclick = () => toggleReviewPanel(reviewTarget);
     if (place.zone) {
       // 흡연구역은 후기를 받지 않으므로 [정보 보기]로 사이드바 목록에서 고를 때와 같은 오른쪽 패널을 엶 (로그인 불필요)
       q(".cc-reviews").textContent = "정보 보기";
-      q(".cc-reviews").onclick = () => setReviewZone(place.zone);
+      q(".cc-reviews").onclick = () => toggleReviewPanel(place.zone, false);
     }
     if (inList) q(".cc-reviews").remove(); // 건물 목록에서 연 가게는 후기를 건물 목록 카드에서 봄
     if (inList) q(".cc-badge").remove(); // 건물 배지는 옆의 건물 목록 카드에 이미 있음
