@@ -367,7 +367,6 @@ export default function App() {
         setReviewZone({
           id: p.target_id,
           type: "building",
-          label: BUILDING_LABEL,
           name: p.address,
           address: p.address,
           note: `후기 ${p.count}개 · ★ ${p.rating}`,

@@ -2,9 +2,7 @@ import { useEffect, useRef } from "react";
 import LoginButton from "./LoginButton.jsx";
 import ReviewSection from "./ReviewSection.jsx";
 import { useAuth } from "./auth.js";
-import { SMOKING_BADGE } from "./zoneIcons.js";
-
-const TYPE_LABEL = { smoking: SMOKING_BADGE.label, nonsmoking: "비흡연구역" };
+import { badgeOf } from "./zoneIcons.js";
 
 // 오른쪽 후기 패널 (후기 보기). 일반 장소(type: "place", label: 종류) 또는 건물(type: "building")의 정보를 보여주고, 후기는 로그인한 사람에게만 보여줌
 export default function ZonePanel({ zone, onClose, onAuthExpired }) {
@@ -12,6 +10,7 @@ export default function ZonePanel({ zone, onClose, onAuthExpired }) {
   const closeRef = useRef(null);
   // 건물(building)이 아니면 일반 장소(place). 흡연구역은 후기 대신 빈 칸을 보여줌
   const targetType = zone.type === "building" ? "building" : "place";
+  const badge = badgeOf(zone);
 
   useEffect(() => {
     closeRef.current?.focus();
@@ -33,8 +32,8 @@ export default function ZonePanel({ zone, onClose, onAuthExpired }) {
 
       <div className="panel-body flex min-h-full flex-col">
         <header className="panel-head">
-          <span className={`badge ${zone.type}`} title={zone.type === "smoking" ? SMOKING_BADGE.title : undefined}>
-            {TYPE_LABEL[zone.type] ?? zone.label}
+          <span className={`badge ${zone.type}`} title={badge.title}>
+            {badge.label}
           </span>
           <h2>{zone.name}</h2>
           {zone.address && zone.address !== zone.name && <p className="addr">{zone.address}</p>}
