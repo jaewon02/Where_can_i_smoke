@@ -19,6 +19,10 @@ export function zoneKind(note) {
   return "open";
 }
 
+// 흡연구역 배지 (왼쪽 목록과 오른쪽 패널이 같이 씀)
+export const SMOKING_BADGE = { label: "공공", title: "공공 흡연장소" };
+export const BUILDING_LABEL = "건물"; // 후기 장소(건물) 배지
+
 export const KIND_LABEL = { open: "개방형", line: "라인형", booth: "개방형 부스", solo: "비대면 부스", closed: "밀폐형·흡연실" };
 
 // 입에 담배를 문 캐릭터. (x, 발 y) 기준, s로 크기 조절
