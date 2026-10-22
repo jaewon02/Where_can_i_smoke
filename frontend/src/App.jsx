@@ -897,6 +897,9 @@ export default function App() {
     setReviewZone(z);
     if (window.matchMedia("(max-width: 600px)").matches) setSidebarOpen(false);
   };
+  // 지도 핀·이름표의 클릭 처리는 effect 안에서 한 번 만들어지므로, 지금 열린 패널을 보도록 항상 최신 pickZone 을 부름
+  const pickZoneRef = useRef(pickZone);
+  pickZoneRef.current = pickZone;
 
   useEffect(() => {
     if (!kakao) return;
@@ -1002,8 +1005,8 @@ export default function App() {
       // 장소 정보 카드(zIndex 6)보다 아래에 깔리게 5 (카드를 닫으면 다시 보임)
       return new kakao.maps.CustomOverlay({ map, position: new kakao.maps.LatLng(p.lat, p.lng), content: el, yAnchor: 1, zIndex: 5, clickable: Boolean(onClick) });
     };
-    // 추천 장소를 누르면: 공공 흡연구역은 흡연구역 카드, 후기 장소는 다른 후기 핀과 같은 pickReviewed 로 후기 패널
-    const open = (p) => (p.kind === "zone" ? openZoneCard(p) : pickReviewed(p));
+    // 추천 장소를 누르면: 공공 흡연구역은 목록과 같은 pickZone 으로 오른쪽 패널, 후기 장소는 다른 후기 핀과 같은 pickReviewed 로 후기 패널
+    const open = (p) => (p.kind === "zone" ? pickZoneRef.current(p) : pickReviewed(p));
     const { near, place } = recommend ?? {};
     const same = sameSpot(near, place); // 같은 후기 장소면 핀 하나에 이름표 하나
     if (near?.kind === "zone") {
@@ -1026,10 +1029,10 @@ export default function App() {
     syncReviewMarkers();
   }, [kakao, recommend?.near?.kind, recommend?.near?.id, recommend?.near?.address, recommend?.place?.address]);
 
-  // 패널의 추천 칸을 누르면 지도를 그곳으로 옮기고, 흡연구역은 정보 카드 / 후기 장소는 후기 패널
+  // 패널의 추천 칸을 누르면 지도를 그곳으로 옮기고, 흡연구역은 목록과 같은 오른쪽 패널(pickZone) / 후기 장소는 후기 패널
   const pickRecommend = (p) => {
     mapRef.current?.setCenter(new kakao.maps.LatLng(p.lat, p.lng));
-    if (p.kind === "zone") openZoneCard(p);
+    if (p.kind === "zone") pickZone(p);
     else pickReviewed(p);
     if (window.matchMedia("(max-width: 600px)").matches) setSidebarOpen(false);
   };
