@@ -38,7 +38,7 @@ export function searchPlaces(kakao, query, center) {
 }
 
 // chosen: 지도에 카드가 떠 있는 결과 (목록에서든 핀에서든 고를 때마다 새 객체라 같은 걸 다시 골라도 강조됨)
-// children: 검색 결과 목록이 접혀 있을 때 그 아래에 보여줄 내용 (화면 안 흡연구역 목록)
+// children: 검색 결과 목록이 접혀 있을 때 그 아래에 보여줄 내용 (흡연 모드일 때 화면 안 흡연구역 목록)
 export default function SearchBox({ kakao, getCenter, chosen, onSelect, onResults, onClear, onRoutePick, children }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState(null); // null이면 목록 닫힘
