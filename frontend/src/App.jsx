@@ -50,7 +50,7 @@ const NEAR_FETCH_LAT = 0.012; // 위도 방향 약 1.3km (넓은 공원 구역�
 const NEAR_FETCH_LNG = 0.015; // 경도 방향 약 1.3km
 const NEAR_REFRESH_M = 400; // 받아 둔 중심에서 이만큼 벗어나면 다시 받음
 
-const START_GPS = { lat: 37.49799161931449, lng: 127.02770445495885 };
+const START_GPS = { lat: 37.417549281400404, lng: 126.9778486982369 };
 
 const svgUri = (svg) => "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
 
