@@ -27,16 +27,24 @@ const withinRadius = (items, dest) =>
     .filter((p) => p.dist <= RECOMMEND_RADIUS_M);
 
 // 가장 가까운 흡연구역 (없으면 null)
-export function nearestZone(zones, dest) {
-  const list = withinRadius(
-    zones.filter((z) => z.type === "smoking"),
-    dest
-  );
+// 가장 가까운 흡연 장소: 공공 흡연구역과 후기가 있는 장소를 합쳐 고름 (없으면 null)
+// kind: "zone"(공공 흡연구역) | "review"(후기 장소). 거리가 같으면 공공 흡연구역을 먼저
+export function nearestSpot(zones, places, dest) {
+  const list = [
+    ...withinRadius(
+      zones.filter((z) => z.type === "smoking"),
+      dest
+    ).map((z) => ({ ...z, kind: "zone" })),
+    ...withinRadius(places, dest).map((p) => ({ ...p, kind: "review" })),
+  ];
   return list.sort((a, b) => a.dist - b.dist)[0] ?? null;
 }
 
 // 후기가 가장 많은 장소. 같으면 도착지에서 가까운 곳, 그래도 같으면 평균 별점이 높은 곳 (없으면 null)
 export function mostReviewed(places, dest) {
-  const list = withinRadius(places, dest);
+  const list = withinRadius(places, dest).map((p) => ({ ...p, kind: "review" }));
   return list.sort((a, b) => b.count - a.count || a.dist - b.dist || (b.rating ?? 0) - (a.rating ?? 0))[0] ?? null;
 }
+
+// 두 추천이 같은 후기 장소인지 (후기 장소는 주소로 구분)
+export const sameSpot = (a, b) => Boolean(a && b && a.kind === "review" && b.kind === "review" && a.address === b.address);

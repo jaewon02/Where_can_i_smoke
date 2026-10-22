@@ -142,17 +142,18 @@ function TransitStep({ seg }) {
 }
 
 // 사이드바 길찾기 화면: 출발 → 도착 경로 (도보·대중교통: 카카오맵 / 자동차: 카카오모빌리티)
-// 도착지 주변 추천 두 칸: 가장 가까운 흡연구역 / 후기가 가장 많은 장소 (도착지에서 500m 안, 누르면 지도에서 그곳으로)
+// 도착지 주변 추천 두 칸: 가장 가까운 흡연 장소(공공 흡연구역 + 후기 장소) / 후기가 가장 많은 장소 (도착지에서 500m 안, 누르면 지도에서 그곳으로)
+// 두 칸이 같은 장소일 수 있음. 장소 표시는 종류(p.kind)에 따라: 공공 흡연구역은 이름, 후기 장소는 주소 + 후기 수
 function Recommend({ rec, onPick }) {
-  const item = (kind, title, p, empty) => (
+  const item = (slot, title, p, empty) => (
     <li>
-      <span className={`rec-label ${kind}`}>{title}</span>
+      <span className={`rec-label ${slot}`}>{title}</span>
       {p ? (
-        <button type="button" className="rec-item" onClick={() => onPick(kind, p)}>
-          <b>{kind === "zone" ? p.name : p.address}</b>
+        <button type="button" className="rec-item" onClick={() => onPick(p)}>
+          <b>{p.kind === "zone" ? p.name : p.address}</b>
           <small>
             {fmtDist(Math.round(p.dist))}
-            {kind === "review" && ` · 후기 ${p.count}개 · ★ ${p.rating}`}
+            {p.kind === "review" && ` · 후기 ${p.count}개 · ★ ${p.rating}`}
           </small>
         </button>
       ) : (
@@ -165,8 +166,8 @@ function Recommend({ rec, onPick }) {
       <h3>도착지 주변 흡연 장소</h3>
       <ul>
         {rec.loading
-          ? <li><p className="rec-msg">흡연구역을 찾는 중…</p></li>
-          : item("zone", "가장 가까운", rec.zone, rec.error ? "흡연구역을 불러오지 못했어요" : "500m 안에 흡연구역이 없어요")}
+          ? <li><p className="rec-msg">흡연 장소를 찾는 중…</p></li>
+          : item("zone", "가장 가까운", rec.near, rec.error ? "흡연구역을 불러오지 못했어요" : "500m 안에 흡연 장소가 없어요")}
         {item("review", "리뷰가 많은", rec.place, "500m 안에 후기가 있는 장소가 없어요")}
       </ul>
     </section>
