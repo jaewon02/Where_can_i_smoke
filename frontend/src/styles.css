@@ -417,12 +417,15 @@ body { margin: 0; font-family: system-ui, "Noto Sans KR", sans-serif; }
   background: none; color: #666; font-size: 16px; cursor: pointer;
 }
 .cc-close:hover { background: #f2f2f2; }
-.cc-back {
-  align-self: flex-start; margin: -6px 0 6px -6px; padding: 4px 6px; border: none; border-radius: 4px;
-  background: none; color: #3396ff; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
-}
-.cc-back:hover { background: #eef5ff; }
-.cc-back[hidden] { display: none; }
+/* 건물 목록 카드 오른쪽에 붙어 펼쳐지는 가게 정보 카드 (목록 카드 자리는 그대로) */
+.bl-detail { position: absolute; top: 0; left: 100%; margin: 0 0 0 8px; animation: bl-slide .2s ease-out; }
+.bl-detail::after { display: none; }
+/* 이름이 같은 애니메이션은 방향만 바꾸면 다시 재생되지 않으므로 접기용을 따로 둠 */
+.bl-detail.bl-closing { animation: bl-slide-out .2s ease-in forwards; pointer-events: none; }
+@keyframes bl-slide { from { opacity: 0; transform: translateX(-24px); } }
+@keyframes bl-slide-out { to { opacity: 0; transform: translateX(-24px); } }
+/* 움직임 줄이기: 애니메이션 대신 바로 나타나고 사라짐 (animationend 로 지우므로 none 대신 아주 짧게) */
+@media (prefers-reduced-motion: reduce) { .bl-detail, .bl-detail.bl-closing { animation-duration: 1ms; } }
 
 /* 같은 주소(한 건물)에 있는 가게 목록 카드: 목록만 스크롤 */
 .bl-list {
@@ -439,7 +442,7 @@ body { margin: 0; font-family: system-ui, "Noto Sans KR", sans-serif; }
 .bl-item.picked b { color: #3396ff; }
 .bl-cat { color: #999; font-size: 12px; }
 .bl-item small { flex-basis: 100%; color: #1f9d55; font-size: 12px; }
-.bl-item small:empty, .bl-cat:empty { display: none; }
+.bl-cat:empty { display: none; }
 
 /* 길찾기 이동 수단 탭 + 대중교통 구간 */
 .route { overflow-y: auto; }
