@@ -998,7 +998,6 @@ export default function App() {
                 origin={listOrigin}
                 selectedId={selectedId}
                 onPick={pickZone}
-                onRoutePick={pickRoutePoint}
                 reviewed={visibleReviewed}
                 reviewHidden={zoomLevel > REVIEW_MAX_LEVEL}
                 // 목록은 누를 때마다 열기/닫기 (이미 그 주소의 후기 패널이 열려 있으면 닫음)

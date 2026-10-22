@@ -141,10 +141,11 @@ body { margin: 0; font-family: system-ui, "Noto Sans KR", sans-serif; }
 .zl-item:focus-visible { outline: 3px solid #1e88e5; outline-offset: -3px; }
 .zl-top { display: flex; align-items: baseline; gap: 8px; }
 .zl-top b { font-size: 14px; font-weight: 600; }
+.zl-official { margin-bottom: 4px; padding: 1px 6px; font-size: 11px; } /* 공공 흡연구역 표시 (후기 장소와 구분) */
 .zl-dist { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--smoking); white-space: nowrap; }
 .zl-addr { display: block; margin-top: 3px; color: #777; font-size: 12px; }
 .zl-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; font-size: 12px; }
-.zl-meta .muted { font-size: 12px; }
+.zl-note { padding: 2px 8px; border-radius: 999px; background: #e3f0fd; color: #1565c0; font-size: 11px; font-weight: 600; }
 
 
 /* 사이드바 화면 (검색 / 길찾기) */
@@ -355,9 +356,6 @@ body { margin: 0; font-family: system-ui, "Noto Sans KR", sans-serif; }
 .od-btns button:focus-visible { outline: 2px solid #1e88e5; outline-offset: -2px; }
 .sr-bottom { display: flex; align-items: center; gap: 8px; margin-top: 3px; }
 .sr-bottom small { flex: 1; min-width: 0; margin-top: 0 !important; }
-.zl-row { position: relative; }
-.zl-row .zl-item { padding-bottom: 38px; }
-.zl-od { position: absolute; left: 18px; bottom: 10px; }
 .panel-od { margin-top: 12px; }
 .panel-od button { padding: 6px 16px; font-size: 13px; }
 
