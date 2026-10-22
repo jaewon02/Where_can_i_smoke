@@ -217,6 +217,24 @@ body { margin: 0; font-family: system-ui, "Noto Sans KR", sans-serif; }
 .pi-results .pi-msg { padding: 10px 12px; font-size: 13px; color: #666; cursor: default; }
 .route-hint { margin: 0; padding: 4px 18px; font-size: 13px; color: #888; line-height: 1.6; }
 
+/* 길찾기: 도착지 주변 흡연 장소 추천 두 칸 */
+.route-rec { margin: 4px 18px 12px; flex: none; }
+.route-rec h3 { margin: 0 0 6px; font-size: 13px; color: #444; }
+.route-rec ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.route-rec li { display: flex; align-items: flex-start; gap: 8px; }
+.rec-label { flex: none; width: 70px; margin-top: 8px; padding: 2px 0; border-radius: 10px; font-size: 11px; font-weight: 700; text-align: center; color: #fff; background: var(--smoking); }
+.rec-label.review { color: var(--smoking); background: #fff; border: 1.5px solid var(--smoking); }
+.rec-item { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; padding: 7px 10px; border: 1px solid #e3e6ea; border-radius: 10px; background: #fff; text-align: left; cursor: pointer; }
+.rec-item:hover { border-color: var(--smoking); }
+.rec-item b { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rec-item small { font-size: 12px; color: #777; }
+.rec-msg { flex: 1; margin: 0; padding: 7px 0; font-size: 12px; color: #888; }
+
+/* 지도: 추천된 핀 머리 위 이름표 (아래 여백 = 핀 높이) */
+.rec-tag-wrap { padding-bottom: 52px; pointer-events: none; }
+.rec-tag { display: block; padding: 3px 8px; border-radius: 11px; font-size: 12px; font-weight: 700; white-space: nowrap; color: #fff; background: var(--smoking); box-shadow: 0 1px 4px rgba(0,0,0,.3); }
+.rec-tag.review { color: var(--smoking); background: #fff; border: 1.5px solid var(--smoking); }
+
 /* 지도 위 출발(파랑)·도착(빨강)·흡연(검정) 물방울 핀 (아래 뾰족한 끝이 그 지점, 높이 44px = 원 36px + 끝) */
 .route-pin {
   position: relative; isolation: isolate; width: 36px; height: 44px; line-height: 36px; text-align: center;
