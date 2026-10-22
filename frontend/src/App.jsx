@@ -746,7 +746,6 @@ export default function App() {
       li.querySelector("b").textContent = p.name;
       li.querySelector(".bl-cat").textContent = placeCat(p);
       li.querySelector("small").textContent = p.phone || "번호 없음";
-      if (p.id === clicked.id) li.firstChild.classList.add("picked");
       // 가게를 누르면 목록 카드 오른쪽에 그 가게의 정보 카드를 붙여 펼침 (목록은 그대로 둠)
       // 이미 펼친 가게를 다시 누르면 접음 (토글)
       li.firstChild.onclick = () => {
