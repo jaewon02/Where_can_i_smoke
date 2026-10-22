@@ -7,7 +7,7 @@ import RoutePanel, { ME } from "./RoutePanel.jsx";
 import Roulette from "./Roulette.jsx";
 import QuitAd from "./QuitAd.jsx";
 import SmokeModeSlider from "./SmokeModeSlider.jsx";
-import { BUILDING_LABEL, zoneKind, zoneMarkerImage } from "./zoneIcons.js";
+import { BUILDING_LABEL, CARD_BADGE, zoneKind, zoneMarkerImage } from "./zoneIcons.js";
 import { buildAreas } from "./areas.js";
 import { findZonesAt } from "./nearbyZone.js";
 import LoginButton from "./LoginButton.jsx";
@@ -50,7 +50,8 @@ const NEAR_FETCH_LAT = 0.012; // 위도 방향 약 1.3km (넓은 공원 구역�
 const NEAR_FETCH_LNG = 0.015; // 경도 방향 약 1.3km
 const NEAR_REFRESH_M = 400; // 받아 둔 중심에서 이만큼 벗어나면 다시 받음
 
-const START_GPS = { lat: 37.417549281400404, lng: 126.9778486982369 };
+// const START_GPS = { lat: 37.49799161931449, lng: 127.02770445495885 }; // 강남역
+const START_GPS = { lat: 37.417549281400404, lng: 126.9778486982369 }; // 메가존 클라우드 과천
 
 const svgUri = (svg) => "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
 
@@ -688,6 +689,13 @@ export default function App() {
     return cat;
   };
 
+  // 카드 제목 옆 배지 (kind: CARD_BADGE 의 키)
+  const setCardBadge = (el, kind) => {
+    el.className = `badge ${kind} cc-badge`;
+    el.textContent = CARD_BADGE[kind].label;
+    el.title = CARD_BADGE[kind].title;
+  };
+
   // 카드 안을 누르거나 스크롤할 때 지도 클릭·확대로 다시 처리되지 않도록 막음
   const stopMapEvents = (el) =>
     ["mousedown", "touchstart", "touchmove", "click", "dblclick", "wheel"].forEach((t) =>
@@ -711,7 +719,8 @@ export default function App() {
     el.className = "click-card bl-card";
     el.innerHTML = `
       <button class="cc-close" aria-label="닫기">✕</button>
-      <div class="cc-head"><b class="cc-title"></b><span class="cc-cat"></span></div>
+      <div class="cc-head"><b class="cc-title"></b></div>
+      <div class="cc-kind"><span class="cc-badge"></span><span class="cc-cat"></span></div>
       <p class="cc-addr"></p>
       <button type="button" class="cc-reviews">후기 보기</button>
       <ul class="bl-list"></ul>`;
@@ -719,6 +728,7 @@ export default function App() {
     stopMapEvents(el);
     q(".cc-close").onclick = closeClickCard;
     q(".cc-title").textContent = title;
+    setCardBadge(q(".cc-badge"), "building");
     q(".cc-cat").textContent = `${list.length}곳`;
     q(".cc-addr").textContent = key;
     // 건물 후기: 도로명주소로 묶어서, 같은 건물이면 어느 가게를 눌러 들어와도 같은 후기 목록 (번호는 처음 누른 장소, 기록용)
@@ -759,7 +769,8 @@ export default function App() {
     el.innerHTML = `
       <button class="cc-close" aria-label="닫기">✕</button>
       <button type="button" class="cc-back" hidden>← 목록</button>
-      <div class="cc-head"><b class="cc-title"></b><span class="cc-cat"></span></div>
+      <div class="cc-head"><b class="cc-title"></b></div>
+      <div class="cc-kind"><span class="cc-badge"></span><span class="cc-cat"></span></div>
       <p class="cc-addr"></p>
       <p class="cc-sub"><span class="cc-zip"></span><span class="cc-jibun"></span></p>
       <p class="cc-note"></p>
@@ -789,8 +800,14 @@ export default function App() {
     };
 
     q(".cc-title").textContent = place.name;
+    setCardBadge(q(".cc-badge"), place.zone ? "smoking" : "building");
     const cat = placeCat(place);
     q(".cc-cat").textContent = cat;
+    if (place.zone) {
+      // 흡연구역은 종류 글자가 없어 배지를 제목 옆에 둠 (일반 장소는 제목 아래 줄에 배지 + 종류)
+      q(".cc-head").append(q(".cc-badge"));
+      q(".cc-kind").remove();
+    }
     const road = place.roadAddress || place.address || "";
     q(".cc-addr").textContent = road || place.jibunAddress;
     // 지번은 도로명주소와 겹치는 앞부분(시·구)을 빼고 동·번지만
@@ -813,7 +830,7 @@ export default function App() {
     }
     q(".cc-note").textContent = place.note ?? "";
     // 후기 보기 (일반 장소 카드): 서버에 로그인을 확인하고, 로그인 전이면 로그인 창을 띄워 로그인하면 이어서 오른쪽 패널을 엶
-    // 카드에 있는 정보로 패널 내용을 만듦 (서버·DB는 부르지 않음). 흡연구역 카드에는 후기 버튼이 없음
+    // 카드에 있는 정보로 패널 내용을 만듦 (서버·DB는 부르지 않음). 흡연구역 카드는 같은 버튼이 [정보 보기]
     const reviewTarget = {
       id: place.id,
       type: "place",
@@ -823,7 +840,12 @@ export default function App() {
       note: place.phone ? `☎ ${place.phone}` : "",
     };
     q(".cc-reviews").onclick = () => requireLogin().then((user) => user && setReviewZone(reviewTarget));
-    if (onBack || place.noReviews) q(".cc-reviews").remove(); // 건물 목록에서 연 가게는 후기를 건물 목록 카드에서 보고, 흡연구역은 후기를 받지 않음
+    if (place.zone) {
+      // 흡연구역은 후기를 받지 않으므로 [정보 보기]로 사이드바 목록에서 고를 때와 같은 오른쪽 패널을 엶 (로그인 불필요)
+      q(".cc-reviews").textContent = "정보 보기";
+      q(".cc-reviews").onclick = () => setReviewZone(place.zone);
+    }
+    if (onBack) q(".cc-reviews").remove(); // 건물 목록에서 연 가게는 후기를 건물 목록 카드에서 봄
     if (place.onPin) el.classList.add("cc-on-pin"); // 핀 마커 위에 띄울 때는 핀을 가리지 않게 더 위로
     const phone = q(".cc-phone");
     phone.textContent = place.phone;
@@ -873,7 +895,7 @@ export default function App() {
     map.setCenter(proj.coordsFromContainerPoint(new kakao.maps.Point(c.x - dx, c.y - dy)));
   };
 
-  // 흡연구역 정보 카드: 이름, 주소, 형태(개방형 등) + [주소 복사] [출발] [도착]
+  // 흡연구역 정보 카드: 이름, 주소, 형태(개방형 등) + [정보 보기] + [주소 복사] [출발] [도착]
   const openZoneCard = (z) => {
     infoRef.current.close();
     closeClickCard();
@@ -884,13 +906,12 @@ export default function App() {
       {
         id: `zone-${z.id}`,
         name: z.name,
-        group: "흡연구역",
-        categoryPath: "",
+        categoryPath: "", // 종류 글자 없이 [공공] 배지만
         roadAddress: address,
         jibunAddress: "",
         address,
         note: z.note ?? "",
-        noReviews: true, // 흡연구역은 후기를 받지 않음 ([후기 보기] 버튼 없음)
+        zone: z, // [후기 보기] 대신 [정보 보기]로 이 구역의 오른쪽 패널을 엶
         phone: "",
         lat: z.lat,
         lng: z.lng,
