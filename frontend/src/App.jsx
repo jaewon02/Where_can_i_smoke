@@ -538,7 +538,7 @@ export default function App() {
 
   // 경로(path: [[lat, lng], ...])를 파란 선으로 그리고, 출발/도착과 도로 사이 빈 구간은 점선으로 이음
   // segments(대중교통)가 있으면 구간마다 색을 달리 그림: 도보는 회색 점선, 버스는 파랑, 지하철은 초록
-  const showRoute = (path, start, end, via, segments) => {
+  const showRoute = (path, start, end, segments) => {
     const map = mapRef.current;
     clearRoute();
     const ll = ([lat, lng]) => new kakao.maps.LatLng(lat, lng);
@@ -572,7 +572,6 @@ export default function App() {
         : [line([startPt, endPt], true)]),
       pin(startPt, "start", "출발"),
       pin(endPt, "end", "도착"),
-      ...(via ? [pin(ll([via.lat, via.lng]), "via", "흡연")] : []),
     ];
 
     const bounds = new kakao.maps.LatLngBounds();
