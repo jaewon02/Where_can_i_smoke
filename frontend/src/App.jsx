@@ -81,14 +81,14 @@ function pinImage(kakao, type) {
   return new kakao.maps.MarkerImage(svgUri(svg), new kakao.maps.Size(34, 46), { offset: new kakao.maps.Point(17, 44) });
 }
 
-// 후기가 있는 장소·건물 핀: 흡연구역 핀과 같은 모양, 검은 바탕 가운데에 흰 글씨 "흡연리뷰" (글씨가 들어가게 조금 크게)
+// 후기가 있는 장소·건물 핀: 흡연구역 핀과 같은 모양, 흰 바탕에 초록 테두리·글씨 "흡연리뷰"
 function reviewPinImage(kakao) {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="44" height="59" viewBox="0 0 40 54">
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="38" height="51" viewBox="0 0 40 54">
     <defs><filter id="s" x="-30%" y="-20%" width="160%" height="150%"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity=".3"/></filter></defs>
-    <path filter="url(#s)" d="M20 2C10 2 2 10 2 20c0 13 18 31 18 31s18-18 18-31C38 10 30 2 20 2z" fill="#111" stroke="#fff" stroke-width="2.5"/>
-    <text x="20" y="20" text-anchor="middle" dominant-baseline="central" fill="#fff" font-size="8.5" font-weight="700"
-      font-family="'Malgun Gothic','Apple SD Gothic Neo',sans-serif" textLength="30" lengthAdjust="spacingAndGlyphs">흡연리뷰</text></svg>`;
-  return new kakao.maps.MarkerImage(svgUri(svg), new kakao.maps.Size(44, 59), { offset: new kakao.maps.Point(22, 57) });
+    <path filter="url(#s)" d="M20 2C10 2 2 10 2 20c0 13 18 31 18 31s18-18 18-31C38 10 30 2 20 2z" fill="#fff" stroke="#1f9d55" stroke-width="3"/>
+    <text x="20" y="20" text-anchor="middle" dominant-baseline="central" fill="#1f9d55" font-size="8.5" font-weight="700"
+      font-family="'Malgun Gothic','Apple SD Gothic Neo',sans-serif" textLength="28" lengthAdjust="spacingAndGlyphs">흡연리뷰</text></svg>`;
+  return new kakao.maps.MarkerImage(svgUri(svg), new kakao.maps.Size(38, 51), { offset: new kakao.maps.Point(19, 49) });
 }
 
 // 주변 금연시설 중심에 얹는 작은 금연 배지
