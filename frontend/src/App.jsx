@@ -7,7 +7,7 @@ import RoutePanel, { ME } from "./RoutePanel.jsx";
 import Roulette from "./Roulette.jsx";
 import QuitAd from "./QuitAd.jsx";
 import SmokeModeSlider from "./SmokeModeSlider.jsx";
-import { BUILDING_LABEL, CARD_BADGE, zoneKind, zoneMarkerImage } from "./zoneIcons.js";
+import { BADGE, zoneKind, zoneMarkerImage } from "./zoneIcons.js";
 import { buildAreas } from "./areas.js";
 import { findZonesAt } from "./nearbyZone.js";
 import LoginButton from "./LoginButton.jsx";
@@ -688,11 +688,11 @@ export default function App() {
     return cat;
   };
 
-  // 카드 제목 옆 배지 (kind: CARD_BADGE 의 키)
+  // 카드 제목 옆 배지 (kind: BADGE 의 키)
   const setCardBadge = (el, kind) => {
     el.className = `badge ${kind} cc-badge`;
-    el.textContent = CARD_BADGE[kind].label;
-    el.title = CARD_BADGE[kind].title;
+    el.textContent = BADGE[kind].label;
+    el.title = BADGE[kind].title;
   };
 
   // 카드 안을 누르거나 스크롤할 때 지도 클릭·확대로 다시 처리되지 않도록 막음
@@ -731,7 +731,7 @@ export default function App() {
     q(".cc-cat").textContent = `${list.length}곳`;
     q(".cc-addr").textContent = key;
     // 건물 후기: 도로명주소로 묶어서, 같은 건물이면 어느 가게를 눌러 들어와도 같은 후기 목록 (번호는 처음 누른 장소, 기록용)
-    const reviewTarget = { id: clicked.id, type: "building", label: BUILDING_LABEL, name: title, address: key, note: `${list.length}곳` };
+    const reviewTarget = { id: clicked.id, type: "building", name: title, address: key, note: `${list.length}곳` };
     q(".cc-reviews").onclick = () => requireLogin().then((user) => user && setReviewZone(reviewTarget));
     const ul = q(".bl-list");
     // 가게 카드를 접을 때는 펼칠 때를 거꾸로 돌려 왼쪽으로 밀어 넣고 사라지게 함 (다른 가게로 바꿀 때는 겹치지 않게 바로 뺌)
@@ -817,6 +817,10 @@ export default function App() {
       // 흡연구역은 종류 글자가 없어 배지를 제목 옆에 둠 (일반 장소는 제목 아래 줄에 배지 + 종류)
       q(".cc-head").append(q(".cc-badge"));
       q(".cc-kind").remove();
+    } else if (!inList && cat) {
+      // 주소에 가게가 하나뿐이라 따로 연 카드: 종류를 배지 글자로 (종류가 없으면 [빌딩] 배지 그대로)
+      q(".cc-badge").textContent = cat;
+      q(".cc-cat").remove();
     }
     const road = place.roadAddress || place.address || "";
     q(".cc-addr").textContent = road || place.jibunAddress;
@@ -856,6 +860,7 @@ export default function App() {
       q(".cc-reviews").onclick = () => setReviewZone(place.zone);
     }
     if (inList) q(".cc-reviews").remove(); // 건물 목록에서 연 가게는 후기를 건물 목록 카드에서 봄
+    if (inList) q(".cc-badge").remove(); // 건물 배지는 옆의 건물 목록 카드에 이미 있음
     if (place.onPin) el.classList.add("cc-on-pin"); // 핀 마커 위에 띄울 때는 핀을 가리지 않게 더 위로
     const phone = q(".cc-phone");
     phone.textContent = place.phone;
