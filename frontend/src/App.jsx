@@ -735,16 +735,32 @@ export default function App() {
     const reviewTarget = { id: clicked.id, type: "building", label: BUILDING_LABEL, name: title, address: key, note: `${list.length}곳` };
     q(".cc-reviews").onclick = () => requireLogin().then((user) => user && setReviewZone(reviewTarget));
     const ul = q(".bl-list");
+    // 가게 카드를 접을 때는 펼칠 때를 거꾸로 돌려 왼쪽으로 밀어 넣고 사라지게 함 (다른 가게로 바꿀 때는 겹치지 않게 바로 뺌)
+    const slideClose = (d) => {
+      d.classList.add("bl-closing");
+      d.addEventListener("animationend", () => d.remove());
+    };
     for (const p of list) {
       const li = document.createElement("li");
       li.innerHTML = `<button type="button" class="bl-item"><b></b><span class="bl-cat"></span><small></small></button>`;
       li.querySelector("b").textContent = p.name;
       li.querySelector(".bl-cat").textContent = placeCat(p);
-      li.querySelector("small").textContent = p.phone;
+      li.querySelector("small").textContent = p.phone || "번호 없음";
       if (p.id === clicked.id) li.firstChild.classList.add("picked");
+      // 가게를 누르면 목록 카드 오른쪽에 그 가게의 정보 카드를 붙여 펼침 (목록은 그대로 둠)
+      // 이미 펼친 가게를 다시 누르면 접음 (토글)
       li.firstChild.onclick = () => {
-        closeClickCard();
-        showPlaceCard(p, building, () => showBuildingList(clicked, places, building));
+        const open = q(".bl-detail:not(.bl-closing)");
+        if (open?.dataset.id === String(p.id)) return slideClose(open);
+        open?.remove();
+        ul.querySelector(".picked")?.classList.remove("picked");
+        li.firstChild.classList.add("picked");
+        const detail = placeCardEl(p, building, true);
+        detail.classList.add("bl-detail");
+        detail.dataset.id = p.id;
+        detail.querySelector(".cc-close").onclick = () => slideClose(detail);
+        el.append(detail);
+        keepCardInView(detail);
       };
       ul.appendChild(li);
     }
@@ -762,13 +778,12 @@ export default function App() {
 
   // 장소 정보 카드 (카카오맵 장소 카드 모양): 이름·종류, 주소, (우)우편번호 (지번), 전화
   // 아래 버튼: [주소 복사] [출발] [도착] (출발/도착은 이 장소를 길찾기 출발지/도착지로)
-  // onBack 이 있으면(건물 목록에서 고른 가게) 위쪽에 [← 목록] 버튼을 둠
-  const showPlaceCard = (place, building, onBack) => {
+  // inList: 건물 목록 카드 옆에 붙이는 가게 카드 (후기는 건물 목록 카드에서 봄)
+  const placeCardEl = (place, building, inList) => {
     const el = document.createElement("div");
     el.className = "click-card";
     el.innerHTML = `
       <button class="cc-close" aria-label="닫기">✕</button>
-      <button type="button" class="cc-back" hidden>← 목록</button>
       <div class="cc-head"><b class="cc-title"></b></div>
       <div class="cc-kind"><span class="cc-badge"></span><span class="cc-cat"></span></div>
       <p class="cc-addr"></p>
@@ -786,10 +801,6 @@ export default function App() {
     const q = (s) => el.querySelector(s);
     stopMapEvents(el);
     q(".cc-close").onclick = closeClickCard;
-    if (onBack) {
-      q(".cc-back").hidden = false;
-      q(".cc-back").onclick = onBack;
-    }
     q(".cc-start").onclick = () => {
       pickRoutePoint("start", place);
       closeClickCard();
@@ -845,7 +856,7 @@ export default function App() {
       q(".cc-reviews").textContent = "정보 보기";
       q(".cc-reviews").onclick = () => setReviewZone(place.zone);
     }
-    if (onBack) q(".cc-reviews").remove(); // 건물 목록에서 연 가게는 후기를 건물 목록 카드에서 봄
+    if (inList) q(".cc-reviews").remove(); // 건물 목록에서 연 가게는 후기를 건물 목록 카드에서 봄
     if (place.onPin) el.classList.add("cc-on-pin"); // 핀 마커 위에 띄울 때는 핀을 가리지 않게 더 위로
     const phone = q(".cc-phone");
     phone.textContent = place.phone;
@@ -856,7 +867,11 @@ export default function App() {
         copy.classList.add("done");
         copy.title = "복사됨";
       });
+    return el;
+  };
 
+  const showPlaceCard = (place, building) => {
+    const el = placeCardEl(place, building);
     clickCardRef.current = new kakao.maps.CustomOverlay({
       map: mapRef.current,
       position: new kakao.maps.LatLng(place.lat, place.lng),
