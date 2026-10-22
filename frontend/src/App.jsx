@@ -7,7 +7,7 @@ import RoutePanel, { ME } from "./RoutePanel.jsx";
 import Roulette from "./Roulette.jsx";
 import QuitAd from "./QuitAd.jsx";
 import SmokeModeSlider from "./SmokeModeSlider.jsx";
-import { zoneKind, zoneMarkerImage } from "./zoneIcons.js";
+import { BUILDING_LABEL, zoneKind, zoneMarkerImage } from "./zoneIcons.js";
 import { buildAreas } from "./areas.js";
 import { findZonesAt } from "./nearbyZone.js";
 import LoginButton from "./LoginButton.jsx";
@@ -117,7 +117,8 @@ export default function App() {
   const [selectedId, setSelectedId] = useState(null); // 정보 카드를 띄운 흡연구역 (사이드바 목록 선택 표시)
   const { user } = useAuth();
   const [reviewZone, setReviewZone] = useState(null); // 오른쪽 후기 패널에 보여줄 흡연구역 또는 일반 장소 (카드에 있던 정보)
-  const [myPosRef, myPosStyle] = usePanelOffset(Boolean(reviewZone && user)); // 후기 패널이 열리면 [내 위치로]도 패널 옆으로 (좁은 화면은 그대로)
+  const panelOpen = Boolean(reviewZone && (user || reviewZone.type === "smoking")); // 흡연구역 패널은 후기가 없어 로그인 없이도 엶
+  const [myPosRef, myPosStyle] = usePanelOffset(panelOpen); // 후기 패널이 열리면 [내 위치로]도 패널 옆으로 (좁은 화면은 그대로)
   const [showSmoking, setShowSmoking] = useState(true); // 흡연모드 (지도 왼쪽 위 버튼, 처음엔 켜짐). 켜면 흡연구역 핀이 보이고, 길찾기에서 흡연구역을 들르고, 금연 안내와 오늘의 담배가 나타남 (꺼져 있으면 안 보임)
   const [showNon, setShowNon] = useState(true); // 비흡연구역 + 주변 금연시설
   const [zoomLevel, setZoomLevel] = useState(6); // 지금 지도 확대 레벨 (금연구역을 보여줄지 안내하는 데 사용)
@@ -326,7 +327,7 @@ export default function App() {
     reviewedRef.current = await Promise.all(rows.map(async (r) => ({ ...r, ...(await coordOf(r.address)) })));
     setReviewedList(reviewedRef.current);
     filterReviewed();
-    // 핀은 주소마다 하나, 누르면 목록에서 고른 것과 같이 후기 패널
+    // 핀은 주소마다 하나 (후기 패널은 목록에서만 엶)
     reviewMarkersRef.current.forEach(({ marker }) => marker.setMap(null));
     const image = reviewPinImage(kakao);
     reviewMarkersRef.current = reviewedRef.current
@@ -363,7 +364,7 @@ export default function App() {
         setReviewZone({
           id: p.target_id,
           type: "building",
-          label: "건물",
+          label: BUILDING_LABEL,
           name: p.address,
           address: p.address,
           note: `후기 ${p.count}개 · ★ ${p.rating}`,
@@ -711,7 +712,7 @@ export default function App() {
     q(".cc-cat").textContent = `${list.length}곳`;
     q(".cc-addr").textContent = key;
     // 건물 후기: 도로명주소로 묶어서, 같은 건물이면 어느 가게를 눌러 들어와도 같은 후기 목록 (번호는 처음 누른 장소, 기록용)
-    const reviewTarget = { id: clicked.id, type: "building", label: "건물", name: title, address: key, note: `${list.length}곳` };
+    const reviewTarget = { id: clicked.id, type: "building", label: BUILDING_LABEL, name: title, address: key, note: `${list.length}곳` };
     q(".cc-reviews").onclick = () => requireLogin().then((user) => user && setReviewZone(reviewTarget));
     const ul = q(".bl-list");
     for (const p of list) {
@@ -889,11 +890,11 @@ export default function App() {
     );
   };
 
-  // 사이드바 목록에서 흡연구역을 고르면 그 핀 위에 정보 카드 (목록은 화면 안 구역이라 지도는 그대로)
-  // 같은 구역을 다시 누르면 카드를 닫음
+  // 사이드바 목록에서 흡연구역을 고르면 오른쪽 패널만 엶 (지도 카드는 띄우지 않음)
+  // 같은 구역을 다시 누르면 패널을 닫음
   const pickZone = (z) => {
-    if (selectedId === z.id) return closeClickCard();
-    openZoneCard(z);
+    if (reviewZone?.type === "smoking" && reviewZone.id === z.id) return setReviewZone(null);
+    setReviewZone(z);
     if (window.matchMedia("(max-width: 600px)").matches) setSidebarOpen(false);
   };
 
@@ -1099,7 +1100,8 @@ export default function App() {
               <ZoneList
                 zones={visibleSmoking}
                 origin={listOrigin}
-                selectedId={selectedId}
+                // 패널이 열린 구역, 없으면 지도 핀 카드를 띄운 구역을 선택 표시
+                selectedId={reviewZone?.type === "smoking" ? reviewZone.id : selectedId}
                 onPick={pickZone}
                 reviewed={visibleReviewed}
                 reviewHidden={zoomLevel > REVIEW_MAX_LEVEL}
@@ -1131,8 +1133,8 @@ export default function App() {
       <div className="credit">경계선: © OpenStreetMap contributors</div>
       {rouletteOpen && showSmoking && <Roulette onClose={() => setRouletteOpen(false)} />}
 
-      {/* 후기 패널은 로그인한 동안에만 (로그아웃하면 닫힘) */}
-      {reviewZone && user && (
+      {/* 후기 패널은 로그인한 동안에만 (로그아웃하면 닫힘). 흡연구역 패널은 예외 */}
+      {panelOpen && (
         <ZonePanel
           zone={reviewZone}
           onClose={() => setReviewZone(null)}
@@ -1140,7 +1142,7 @@ export default function App() {
           onAuthExpired={() => requireLogin().then((u) => u || setReviewZone(null))}
         />
       )}
-      <LoginButton className="absolute top-3.5 right-3.5 z-10" panelOpen={Boolean(reviewZone && user)} />
+      <LoginButton className="absolute top-3.5 right-3.5 z-10" panelOpen={panelOpen} />
       {/* 오른쪽 아래: 지도를 내 위치로 이동 + 확대(+)·축소(−). 후기 패널이 열리면 묶음째 패널 옆으로 비켜 섬 */}
       <div className="map-controls" ref={myPosRef} style={myPosStyle}>
         <button type="button" className="my-pos-btn" onClick={goToMyPos} title="내 위치로 이동" aria-label="내 위치로 이동">
