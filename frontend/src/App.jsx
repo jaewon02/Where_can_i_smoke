@@ -738,6 +738,7 @@ export default function App() {
     // 가게 카드를 접을 때는 펼칠 때를 거꾸로 돌려 왼쪽으로 밀어 넣고 사라지게 함 (다른 가게로 바꿀 때는 겹치지 않게 바로 뺌)
     const slideClose = (d) => {
       d.classList.add("bl-closing");
+      ul.querySelector(".picked")?.classList.remove("picked");
       d.addEventListener("animationend", () => d.remove());
     };
     for (const p of list) {
