@@ -1,3 +1,5 @@
+import { BUILDING_LABEL, SMOKING_BADGE } from "./zoneIcons.js";
+
 // 두 좌표 사이 거리(m)
 function distance(a, b) {
   const R = 6371000;
@@ -38,6 +40,7 @@ export default function ZoneList({ zones, origin, selectedId, onPick, reviewed, 
                 aria-pressed={z.address === openAddress}
                 onClick={() => onPickReviewed(z)}
               >
+                <span className="badge building zl-official">{BUILDING_LABEL}</span>
                 <div className="zl-top">
                   <b>{z.address}</b>
                   {z.dist != null && <span className="zl-dist">{fmtDist(z.dist)}</span>}
@@ -54,7 +57,9 @@ export default function ZoneList({ zones, origin, selectedId, onPick, reviewed, 
                 aria-pressed={z.id === selectedId}
                 onClick={() => onPick(z)}
               >
-                <span className="badge smoking zl-official" title="공공 흡연장소">공공</span>
+                <span className="badge smoking zl-official" title={SMOKING_BADGE.title}>
+                  {SMOKING_BADGE.label}
+                </span>
                 <div className="zl-top">
                   <b>{z.name}</b>
                   {z.dist != null && <span className="zl-dist">{fmtDist(z.dist)}</span>}
