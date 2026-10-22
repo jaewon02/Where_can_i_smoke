@@ -985,21 +985,29 @@ export default function App() {
             onClear={clearSearch}
             onRoutePick={pickRoutePoint}
           >
-            <ZoneList
-              zones={visibleSmoking}
-              origin={listOrigin}
-              selectedId={selectedId}
-              hidden={!showSmoking}
-              onPick={pickZone}
-              onRoutePick={pickRoutePoint}
-              reviewed={visibleReviewed} // 목록은 흡연모드와 상관없이 보여줌 (지도의 후기 핀만 흡연모드일 때)
-              reviewHidden={zoomLevel > REVIEW_MAX_LEVEL}
-              // 목록은 누를 때마다 열기/닫기 (이미 그 주소의 후기 패널이 열려 있으면 닫음)
-              openAddress={reviewZone?.type === "building" && user ? reviewZone.address : null}
-              onPickReviewed={(p) =>
-                reviewZone?.type === "building" && reviewZone.address === p.address ? setReviewZone(null) : pickReviewed(p)
-              }
-            />
+            {/* 일반 모드에서는 흡연구역·후기 장소 목록을 아예 숨김 */}
+            {!showSmoking && (
+              <div className="zone-list sidebar-empty">
+                <p className="zl-msg">지도 좌측 상단의 버튼으로 흡연 모드를 켜면 흡연구역이 보여요</p>
+                <div className="empty-box" aria-hidden="true" />
+              </div>
+            )}
+            {showSmoking && (
+              <ZoneList
+                zones={visibleSmoking}
+                origin={listOrigin}
+                selectedId={selectedId}
+                onPick={pickZone}
+                onRoutePick={pickRoutePoint}
+                reviewed={visibleReviewed}
+                reviewHidden={zoomLevel > REVIEW_MAX_LEVEL}
+                // 목록은 누를 때마다 열기/닫기 (이미 그 주소의 후기 패널이 열려 있으면 닫음)
+                openAddress={reviewZone?.type === "building" && user ? reviewZone.address : null}
+                onPickReviewed={(p) =>
+                  reviewZone?.type === "building" && reviewZone.address === p.address ? setReviewZone(null) : pickReviewed(p)
+                }
+              />
+            )}
           </SearchBox>
           {showSmoking && (
             <div className="sidebar-ad">
