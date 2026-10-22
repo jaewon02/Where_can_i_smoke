@@ -142,7 +142,38 @@ function TransitStep({ seg }) {
 }
 
 // 사이드바 길찾기 화면: 출발 → 도착 경로 (도보·대중교통: 카카오맵 / 자동차: 카카오모빌리티)
-export default function RoutePanel({ kakao, getCenter, myPos, start, end, setStart, setEnd, smoking, onLocate, onShowRoute, onClearRoute, onBack }) {
+// 도착지 주변 추천 두 칸: 가장 가까운 흡연구역 / 후기가 가장 많은 장소 (도착지에서 500m 안, 누르면 지도에서 그곳으로)
+function Recommend({ rec, onPick }) {
+  const item = (kind, title, p, empty) => (
+    <li>
+      <span className={`rec-label ${kind}`}>{title}</span>
+      {p ? (
+        <button type="button" className="rec-item" onClick={() => onPick(kind, p)}>
+          <b>{kind === "zone" ? p.name : p.address}</b>
+          <small>
+            {fmtDist(Math.round(p.dist))}
+            {kind === "review" && ` · 후기 ${p.count}개 · ★ ${p.rating}`}
+          </small>
+        </button>
+      ) : (
+        <p className="rec-msg">{empty}</p>
+      )}
+    </li>
+  );
+  return (
+    <section className="route-rec" aria-label="도착지 주변 흡연 장소 추천">
+      <h3>도착지 주변 흡연 장소</h3>
+      <ul>
+        {rec.loading
+          ? <li><p className="rec-msg">흡연구역을 찾는 중…</p></li>
+          : item("zone", "가장 가까운", rec.zone, rec.error ? "흡연구역을 불러오지 못했어요" : "500m 안에 흡연구역이 없어요")}
+        {item("review", "리뷰가 많은", rec.place, "500m 안에 후기가 있는 장소가 없어요")}
+      </ul>
+    </section>
+  );
+}
+
+export default function RoutePanel({ kakao, getCenter, myPos, start, end, setStart, setEnd, smoking, recommend, onPickRecommend, onLocate, onShowRoute, onClearRoute, onBack }) {
   const [mode, setMode] = useState("walk");
   const [route, setRoute] = useState(null);
   const [option, setOption] = useState(0); // 대중교통: 여러 경로 중 몇 번째를 볼지
@@ -297,6 +328,7 @@ export default function RoutePanel({ kakao, getCenter, myPos, start, end, setSta
           도보는 직선 10km, 대중교통은 100km, 자동차는 200km 이내만 안내해요.
         </p>
       )}
+      {recommend && <Recommend rec={recommend} onPick={onPickRecommend} />}
       <div className="route-ads">
         {smoking && <QuitAd slot={1} />}
       </div>

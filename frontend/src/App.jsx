@@ -17,6 +17,7 @@ import ZonePanel from "./ZonePanel.jsx";
 import { requireLogin, useAuth } from "./auth.js";
 import { findPlacesAt, LABEL_PRIORITY } from "./nearbyPlaces.js";
 import { listReviewedPlaces } from "./reviews.js";
+import { boundsAround, mostReviewed, nearestZone } from "./recommend.js";
 
 // 흡연자 기준 색: 피워도 되는 곳(흡연구역)은 초록, 피우면 안 되는 곳(금연구역)은 빨강. styles.css 의 --smoking / --nonsmoking 과 같은 값
 const COLORS = { smoking: "#1f9d55", nonsmoking: "#e5484d" };
@@ -148,6 +149,11 @@ export default function App() {
   gpsDragRef.current = gpsDrag;
   const clickCardRef = useRef(null); // 지도의 장소를 눌렀을 때 뜨는 장소 정보 카드
   const clickReqRef = useRef(0);
+  // 길찾기 도착지 주변 추천: { loading, error, zone, place } (흡연모드에서 도착지가 있을 때만, 아니면 null)
+  const [recommend, setRecommend] = useState(null);
+  const [reviewedList, setReviewedList] = useState([]); // reviewedRef 와 같은 내용. 바뀌면 추천을 다시 계산하려고 상태로도 둠
+  const recommendAddrRef = useRef(null); // 추천된 후기 장소 주소: 이 핀은 확대 레벨과 상관없이 보임
+  const recommendOverlaysRef = useRef([]); // 추천 이름표와 추천 흡연구역 핀
 
   // 구역 배지를 눌렀을 때 보여줄 말풍선: 구역에 속한 시설 목록과 적용 기준
   const openAreaInfo = (members, marker) => {
@@ -319,24 +325,35 @@ export default function App() {
         })
       );
     reviewedRef.current = await Promise.all(rows.map(async (r) => ({ ...r, ...(await coordOf(r.address)) })));
+    setReviewedList(reviewedRef.current);
     filterReviewed();
     // 핀은 주소마다 하나 (후기 패널은 목록에서만 엶)
-    reviewMarkersRef.current.forEach((m) => m.setMap(null));
+    reviewMarkersRef.current.forEach(({ marker }) => marker.setMap(null));
     const image = reviewPinImage(kakao);
     reviewMarkersRef.current = reviewedRef.current
       .filter((p) => p.lat != null)
       .map((p) => {
         const marker = new kakao.maps.Marker({
-          // 흡연모드가 꺼져 있으면 후기 핀은 숨김, 켜져 있어도 많이 확대했을 때만
-          map: flagsRef.current.showSmoking && mapRef.current.getLevel() <= REVIEW_MAX_LEVEL ? mapRef.current : null,
           position: new kakao.maps.LatLng(p.lat, p.lng),
           title: `${p.address} (★ ${p.rating} · 후기 ${p.count}개)`,
           image,
           clickable: true, // 눌러도 지도 클릭(장소 카드)으로 넘어가지 않게
           zIndex: 1,
         });
-        return marker;
+        kakao.maps.event.addListener(marker, "click", () => pickReviewed(p));
+        return { marker, address: p.address };
       });
+    syncReviewMarkers();
+  };
+
+  // 후기 핀 보이기: 흡연모드이고 많이 확대했을 때만. 단, 길찾기에서 추천된 후기 장소 1곳은 확대 레벨과 상관없이
+  const syncReviewMarkers = () => {
+    const map = mapRef.current;
+    if (!map) return;
+    const zoomedIn = map.getLevel() <= REVIEW_MAX_LEVEL;
+    reviewMarkersRef.current.forEach(({ marker, address }) =>
+      marker.setMap(flagsRef.current.showSmoking && (zoomedIn || address === recommendAddrRef.current) ? map : null)
+    );
   };
 
   // 목록에서 후기 있는 주소를 고르면 건물 후기 패널 (같은 주소의 장소·건물 후기를 모아 봄)
@@ -910,9 +927,9 @@ export default function App() {
     if (kakao && !reviewZone) fetchReviewed();
   }, [kakao, reviewZone]);
 
-  // 흡연모드이고 많이 확대했을 때만 후기 핀을 지도에 올림
+  // 흡연모드이고 많이 확대했을 때만 후기 핀을 지도에 올림 (추천된 1곳은 예외)
   useEffect(() => {
-    reviewMarkersRef.current.forEach((m) => m.setMap(showSmoking && zoomLevel <= REVIEW_MAX_LEVEL ? mapRef.current : null));
+    syncReviewMarkers();
   }, [zoomLevel]);
 
   // 후기 패널이 열리면 떠 있는 카드가 패널에 가려지지 않게 (패널이 미끄러져 들어온 뒤에 잼)
@@ -928,8 +945,82 @@ export default function App() {
     drawZones();
     fetchFacilities();
     // 후기가 있는 장소 핀도 흡연모드일 때만 (많이 확대했을 때만)
-    reviewMarkersRef.current.forEach((m) => m.setMap(showSmoking && zoomLevel <= REVIEW_MAX_LEVEL ? mapRef.current : null));
+    syncReviewMarkers();
   }, [showSmoking, showNon]);
+
+  // 길찾기 도착지 주변 추천: 흡연모드에서 길찾기 화면에 도착지가 있으면 바로 (출발지는 없어도 됨)
+  // 흡연구역은 화면과 상관없이 도착지 주변 범위로 따로 받고, 후기 장소는 받아 둔 전체 목록에서 고름
+  const routeDest = routeEnd?.isMe ? (myPos.lat != null ? { lat: myPos.lat, lng: myPos.lng } : null) : routeEnd;
+  const destLat = sidebarMode === "route" && showSmoking ? routeDest?.lat : undefined;
+  const destLng = sidebarMode === "route" && showSmoking ? routeDest?.lng : undefined;
+  const [recommendZones, setRecommendZones] = useState({ key: null, rows: [], error: false });
+  useEffect(() => {
+    if (destLat == null || destLng == null) return;
+    const key = `${destLat},${destLng}`;
+    let cancelled = false;
+    setRecommendZones({ key: null, rows: [], error: false });
+    const qs = new URLSearchParams({ ...boundsAround({ lat: destLat, lng: destLng }), type: "smoking" });
+    fetch(`/api/zones?${qs}`)
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((rows) => !cancelled && setRecommendZones({ key, rows, error: false }))
+      .catch(() => !cancelled && setRecommendZones({ key, rows: [], error: true }));
+    return () => {
+      cancelled = true;
+    };
+  }, [destLat, destLng]);
+
+  useEffect(() => {
+    if (destLat == null || destLng == null) return setRecommend(null);
+    const dest = { lat: destLat, lng: destLng };
+    const loaded = recommendZones.key === `${destLat},${destLng}`;
+    setRecommend({
+      loading: !loaded,
+      error: loaded && recommendZones.error,
+      zone: loaded ? nearestZone(recommendZones.rows, dest) : null,
+      place: mostReviewed(reviewedList, dest),
+    });
+  }, [destLat, destLng, recommendZones, reviewedList]);
+
+  // 추천된 두 곳의 지도 표시: 흡연구역 핀(화면 밖 조회로 찾은 곳일 수 있어 따로 하나 더) + 이름표, 후기 핀은 레벨과 상관없이
+  useEffect(() => {
+    if (!kakao || !mapRef.current) return;
+    const map = mapRef.current;
+    recommendOverlaysRef.current.forEach((o) => o.setMap(null));
+    recommendOverlaysRef.current = [];
+    const tag = (p, text, kind) => {
+      // 바깥 상자 아래쪽 여백만큼 핀 머리 위로 띄움 (yAnchor는 바깥 상자 기준)
+      const el = document.createElement("div");
+      el.className = "rec-tag-wrap";
+      el.innerHTML = `<span class="rec-tag ${kind}"></span>`;
+      el.firstChild.textContent = text;
+      return new kakao.maps.CustomOverlay({ map, position: new kakao.maps.LatLng(p.lat, p.lng), content: el, yAnchor: 1, zIndex: 7 });
+    };
+    const zone = recommend?.zone;
+    if (zone) {
+      const marker = new kakao.maps.Marker({
+        map,
+        position: new kakao.maps.LatLng(zone.lat, zone.lng),
+        image: zoneMarkerImage(kakao, zoneKind(zone.note)),
+        title: zone.name,
+        clickable: true,
+        zIndex: 2,
+      });
+      kakao.maps.event.addListener(marker, "click", () => openZoneCard(zone));
+      recommendOverlaysRef.current.push(marker, tag(zone, "가장 가까운", "zone"));
+    }
+    const place = recommend?.place;
+    if (place) recommendOverlaysRef.current.push(tag(place, "리뷰가 많은", "review"));
+    recommendAddrRef.current = place?.address ?? null;
+    syncReviewMarkers();
+  }, [kakao, recommend?.zone?.id, recommend?.place?.address]);
+
+  // 패널의 추천 칸을 누르면 지도를 그곳으로 옮기고, 흡연구역은 정보 카드 / 후기 장소는 후기 패널
+  const pickRecommend = (kind, p) => {
+    mapRef.current?.setCenter(new kakao.maps.LatLng(p.lat, p.lng));
+    if (kind === "zone") openZoneCard(p);
+    else pickReviewed(p);
+    if (window.matchMedia("(max-width: 600px)").matches) setSidebarOpen(false);
+  };
 
   if (error) return <div className="error">{error.message}</div>;
 
@@ -947,6 +1038,8 @@ export default function App() {
             setStart={setRouteStart}
             setEnd={setRouteEnd}
             smoking={showSmoking}
+            recommend={recommend}
+            onPickRecommend={pickRecommend}
             onLocate={locate}
             onShowRoute={showRoute}
             onClearRoute={clearRoute}
