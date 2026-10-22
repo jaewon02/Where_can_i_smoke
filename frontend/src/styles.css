@@ -374,8 +374,11 @@ body { margin: 0; font-family: system-ui, "Noto Sans KR", sans-serif; }
   /* 카카오 오버레이 바깥 요소가 줄바꿈을 막아서(nowrap) 긴 이름·주소가 카드 밖으로 넘치므로 다시 허용 */
   white-space: normal; word-break: keep-all; overflow-wrap: anywhere;
 }
+/* 카카오 오버레이 바깥 요소가 카드 아래 여백(장소 이름·핀 자리)까지 덮어 같은 자리를 다시 누를 수 없으므로, 클릭은 카드 본체만 받음 */
+div:not(.click-card):has(> .click-card) { pointer-events: none; }
+.click-card { pointer-events: auto; }
 .click-card::after { /* 아래쪽 말풍선 꼬리 */
-  content: ""; position: absolute; left: 50%; bottom: -7px; width: 14px; height: 14px;
+  pointer-events: none; content: ""; position: absolute; left: 50%; bottom: -7px; width: 14px; height: 14px;
   background: #fff; transform: translateX(-50%) rotate(45deg); box-shadow: 3px 3px 6px rgba(0,0,0,.08);
 }
 .cc-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; padding-right: 24px; }
