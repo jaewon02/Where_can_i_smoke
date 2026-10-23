@@ -45,7 +45,10 @@ export default function ZoneList({ zones, origin, selectedId, onPick, reviewed, 
                   {BADGE.building.label}
                 </span>
                 <div className="zl-top">
-                  <b>{z.address}</b>
+                  <b>
+                    {z.address}
+                    {z.buildingName && ` (${z.buildingName})`}
+                  </b>
                   {z.dist != null && <span className="zl-dist">{fmtDist(z.dist)}</span>}
                 </div>
                 <small className="zl-addr">

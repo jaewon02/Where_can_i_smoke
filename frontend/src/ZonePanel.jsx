@@ -60,7 +60,6 @@ export default function ZonePanel({ zone, onClose, onAuthExpired, onReviewsChang
             {badge.label}
           </span>
           <h2>{zone.name}</h2>
-          {zone.address && zone.address !== zone.name && <p className="addr">{zone.address}</p>}
           {zone.note && <p className="note">{zone.note}</p>}
           {zone.radius_m && <p className="note">금연 반경 약 {zone.radius_m}m</p>}
         </header>

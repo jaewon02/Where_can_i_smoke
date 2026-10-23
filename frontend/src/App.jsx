@@ -54,6 +54,30 @@ const START_GPS = { lat: 37.417549281400404, lng: 126.9778486982369 }; // 메가
 // const START_GPS = { lat: 37.513328086879035, lng: 127.10404258653621 }; // 잠실 롯데타워 (테스트 용도)
 
 const reviewNote = (p) => `후기 ${p.count}개 · ★ ${p.rating}`;
+// 후기 있는 주소의 건물 후기 패널 내용 (목록에서 열든 후기 핀 카드에서 열든 같게). 건물 이름을 알면 주소 뒤에 괄호로
+const reviewedZone = (p, buildingName) => ({
+  id: p.target_id,
+  type: "building",
+  name: buildingName ? `${p.address} (${buildingName})` : p.address,
+  address: p.address,
+  note: reviewNote(p),
+  rated: true, // 후기를 쓰거나 지우면 note 를 다시 계산 (fetchReviewed)
+});
+
+// 건물 자체인 장소(빌딩·오피스텔·상가·아파트)
+const isBuilding = (p) => /^부동산 > .*(빌딩|오피스텔|상가|아파트|주상복합)/.test(p.categoryPath || "");
+const buildingPlaceOf = (clicked, places) => (isBuilding(clicked) ? clicked : places.find(isBuilding));
+// 건물 이름: 목록 안에 건물 자체인 장소가 있으면 그 이름, 없으면 누른 지점의 건물 이름 (둘 다 없으면 "")
+const buildingNameOf = (clicked, places, building) =>
+  buildingPlaceOf(clicked, places)?.name || (building?.roadAddress === (clicked.roadAddress || clicked.jibunAddress) && building.name) || "";
+
+// 후기 핀 카드 재료: 그 주소의 장소들, 맨 위에 둘 장소 (그 주소에 카카오 장소가 없으면 주소만으로 만듦), 건물
+const reviewedCardData = (kakao, p) =>
+  findPlacesAt(kakao, p.lat, p.lng, 50).then(({ places, building }) => {
+    const same = places.filter((x) => x.groupCode !== "BUS" && (x.roadAddress || x.jibunAddress) === p.address);
+    const clicked = same[0] ?? { id: p.target_id, name: building?.name || p.address, categoryPath: "", roadAddress: p.address, jibunAddress: "" };
+    return { same, clicked, building };
+  });
 
 const svgUri = (svg) => "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
 
@@ -148,6 +172,7 @@ export default function App() {
   const zonesRef = useRef([]);
   const reviewedRef = useRef([]); // 후기가 있는 주소 + 좌표 { address, count, rating, target_id, lat, lng }
   const coordsRef = useRef(new Map()); // 주소 -> 좌표 (카카오 주소 검색은 주소마다 한 번만)
+  const buildingNamesRef = useRef(new Map()); // 주소 -> 건물 이름 (후기 목록에 붙임. 주소마다 한 번만 찾음)
   const reviewMarkersRef = useRef([]); // 후기가 있는 주소의 핀들
   const reviewPinImgRef = useRef(null); // 후기 핀 이미지 { normal, selected }
   const mapRef = useRef(null);
@@ -348,7 +373,26 @@ export default function App() {
           resolve(c);
         })
       );
-    reviewedRef.current = await Promise.all(rows.map(async (r) => ({ ...r, ...(await coordOf(r.address)) })));
+    const names = buildingNamesRef.current;
+    reviewedRef.current = await Promise.all(
+      rows.map(async (r) => ({ ...r, ...(await coordOf(r.address)), buildingName: names.get(r.address) }))
+    );
+    // 목록의 건물 이름은 카드 제목과 같은 방법으로 찾느라 느려서, 목록·핀을 먼저 그린 뒤 아직 모르는 주소만 찾아 채움
+    const unknown = reviewedRef.current.filter((p) => p.lat != null && !names.has(p.address));
+    unknown.forEach((p) => names.set(p.address, "")); // 찾는 중에 다시 불려도 또 찾지 않게
+    Promise.all(
+      unknown.map((p) =>
+        reviewedCardData(kakao, p).then(
+          ({ same, clicked, building }) => names.set(p.address, buildingNameOf(clicked, same, building)),
+          () => {} // ponytail: 실패한 주소는 이름 없이 둠 (새로 고침 전까지 다시 찾지 않음)
+        )
+      )
+    ).then(() => {
+      if (!unknown.length) return;
+      reviewedRef.current = reviewedRef.current.map((p) => ({ ...p, buildingName: names.get(p.address) }));
+      setReviewedList(reviewedRef.current);
+      filterReviewed();
+    });
     setReviewedList(reviewedRef.current);
     filterReviewed();
     // 목록에서 연 건물 패널이면 머리말의 후기 수·별점도 새 값으로
@@ -407,14 +451,12 @@ export default function App() {
     closeClickCard();
     setCardReviewAddr(p.address); // 누른 순간부터 이 핀을 채움 (카드가 열려 있는 동안)
     const reqId = clickReqRef.current;
-    findPlacesAt(kakao, p.lat, p.lng, 50).then(({ places, building }) => {
+    reviewedCardData(kakao, p).then(({ same, clicked, building }) => {
       if (reqId !== clickReqRef.current) {
         setCardReviewAddr((a) => (a === p.address ? null : a)); // 그새 다른 곳을 눌러 카드가 안 뜨면 이 핀의 선택은 해제 (다른 핀을 이미 골랐다면 그대로 둠)
         return; // 그새 다른 곳을 눌렀으면 무시
       }
-      const same = places.filter((x) => x.groupCode !== "BUS" && (x.roadAddress || x.jibunAddress) === p.address);
-      const clicked = same[0] ?? { id: p.target_id, name: building?.name || p.address, categoryPath: "", roadAddress: p.address, jibunAddress: "" };
-      showBuildingList({ ...clicked, lat: p.lat, lng: p.lng, onPin: true }, same, building);
+      showBuildingList({ ...clicked, lat: p.lat, lng: p.lng, onPin: true, reviewed: p }, same, building);
       setCardReviewAddr(p.address); // showBuildingList 가 처음에 카드 상태를 비우므로, 카드를 띄운 뒤 이 핀을 다시 선택으로
     });
   };
@@ -426,14 +468,7 @@ export default function App() {
       if (!user) return;
       if (openCard && p.lat != null) openReviewedCard(p);
       else setCardReviewAddr(null); // 앞서 핀을 눌러 채워 둔 선택은 풀고, 이 주소의 핀(후기 패널)이 채워지게
-      setReviewZone({
-        id: p.target_id,
-        type: "building",
-        name: p.address,
-        address: p.address,
-        note: reviewNote(p),
-        rated: true, // 후기를 쓰거나 지우면 note 를 다시 계산 (fetchReviewed)
-      });
+      setReviewZone(reviewedZone(p, p.buildingName));
       return user; // 로그인해서 패널을 열었는지 부른 쪽에서 알 수 있게
     });
 
@@ -817,10 +852,9 @@ export default function App() {
   const showBuildingList = (clicked, places, building) => {
     closeClickCard();
     const key = clicked.roadAddress || clicked.jibunAddress;
-    // 건물 이름: 목록 안에 건물 자체인 장소(빌딩·오피스텔·상가·아파트)가 있으면 그 이름, 없으면 누른 지점의 건물 이름
-    const isBuilding = (p) => /^부동산 > .*(빌딩|오피스텔|상가|아파트|주상복합)/.test(p.categoryPath || "");
-    const buildingPlace = isBuilding(clicked) ? clicked : places.find(isBuilding);
-    const title = buildingPlace?.name || (building?.roadAddress === key && building.name) || "이 건물의 장소";
+    const buildingPlace = buildingPlaceOf(clicked, places);
+    const uniqueName = buildingNameOf(clicked, places, building);
+    const title = uniqueName || "이 건물의 장소";
     // 누른 가게를 맨 위에, 나머지는 이름순. 건물 이름으로 쓴 장소는 제목에 있으니 목록에서 뺌
     const list = [clicked, ...places.filter((p) => p.id !== clicked.id).sort((a, b) => a.name.localeCompare(b.name, "ko"))].filter(
       (p) => p !== buildingPlace
@@ -843,7 +877,12 @@ export default function App() {
     q(".cc-cat").textContent = `${list.length}곳`;
     q(".cc-addr").textContent = key;
     // 건물 후기: 도로명주소로 묶어서, 같은 건물이면 어느 가게를 눌러 들어와도 같은 후기 목록 (번호는 처음 누른 장소, 기록용)
-    const reviewTarget = { id: clicked.id, type: "building", name: title, address: key, note: `${list.length}곳` };
+    // 후기 핀에서 연 카드면 목록에서 열 때와 같은 패널 머리말 (주소(건물 이름)·후기 수·별점)
+    const reviewTarget = clicked.reviewed
+      ? reviewedZone(clicked.reviewed, uniqueName)
+      : { id: clicked.id, type: "building", name: title, address: key, note: `${list.length}곳` };
+    // 목록에서 고르면 패널이 카드보다 먼저 열리므로, 카드에서 알게 된 건물 이름을 열린 패널 제목에도 붙임
+    if (clicked.reviewed) setReviewZone((z) => (z?.rated && z.address === key ? { ...z, name: reviewTarget.name } : z));
     q(".cc-reviews").onclick = () => toggleReviewPanel(reviewTarget);
     const ul = q(".bl-list");
     // 가게 카드를 접을 때는 펼칠 때를 거꾸로 돌려 왼쪽으로 밀어 넣고 사라지게 함 (다른 가게로 바꿀 때는 겹치지 않게 바로 뺌)
