@@ -2,7 +2,31 @@ import { useEffect, useRef } from "react";
 import LoginButton from "./LoginButton.jsx";
 import ReviewSection from "./ReviewSection.jsx";
 import { useAuth } from "./auth.js";
-import { badgeOf } from "./zoneIcons.js";
+import { badgeOf, zoneKind } from "./zoneIcons.js";
+import { ZONE_GUIDE } from "./zoneGuide.js";
+
+// 흡연구역 종류별 이용 안내: 어떤 곳인지, 이용 에티켓, 주의할 점
+function ZoneGuide({ kind }) {
+  const g = ZONE_GUIDE[kind];
+  return (
+    <section aria-label={g.title} className="zone-guide">
+      <h3>{g.title}</h3>
+      <p className="zg-intro">{g.intro}</p>
+      <h4>이용 에티켓</h4>
+      <ul className="zg-list ok">
+        {g.manners.map((t) => (
+          <li key={t}>{t}</li>
+        ))}
+      </ul>
+      <h4>주의하세요</h4>
+      <ul className="zg-list warn">
+        {g.cautions.map((t) => (
+          <li key={t}>{t}</li>
+        ))}
+      </ul>
+    </section>
+  );
+}
 
 // 오른쪽 후기 패널 (후기 보기). 일반 장소(type: "place", label: 종류) 또는 건물(type: "building")의 정보를 보여주고, 후기는 로그인한 사람에게만 보여줌
 export default function ZonePanel({ zone, onClose, onAuthExpired }) {
@@ -41,9 +65,9 @@ export default function ZonePanel({ zone, onClose, onAuthExpired }) {
           {zone.radius_m && <p className="note">금연 반경 약 {zone.radius_m}m</p>}
         </header>
 
-        {/* 흡연구역은 후기를 받지 않아 빈 칸만 (일반 모드의 왼쪽 사이드바처럼) */}
+        {/* 흡연구역은 후기를 받지 않아 종류별 이용 안내를 보여줌 */}
         {zone.type === "smoking" ? (
-          <section aria-label={`${zone.name} 정보`} className="empty-box mt-5" />
+          <ZoneGuide kind={zoneKind(zone.note)} />
         ) : (
           <ReviewSection
             key={`${targetType}:${targetType === "building" ? zone.address : zone.id}`}
