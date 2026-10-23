@@ -54,6 +54,15 @@ const START_GPS = { lat: 37.417549281400404, lng: 126.9778486982369 }; // 메가
 // const START_GPS = { lat: 37.513328086879035, lng: 127.10404258653621 }; // 잠실 롯데타워 (테스트 용도)
 
 const reviewNote = (p) => `후기 ${p.count}개 · ★ ${p.rating}`;
+// 후기 있는 주소의 건물 후기 패널 내용 (목록에서 열든 후기 핀 카드에서 열든 같게)
+const reviewedZone = (p) => ({
+  id: p.target_id,
+  type: "building",
+  name: p.address,
+  address: p.address,
+  note: reviewNote(p),
+  rated: true, // 후기를 쓰거나 지우면 note 를 다시 계산 (fetchReviewed)
+});
 
 const svgUri = (svg) => "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
 
@@ -414,7 +423,7 @@ export default function App() {
       }
       const same = places.filter((x) => x.groupCode !== "BUS" && (x.roadAddress || x.jibunAddress) === p.address);
       const clicked = same[0] ?? { id: p.target_id, name: building?.name || p.address, categoryPath: "", roadAddress: p.address, jibunAddress: "" };
-      showBuildingList({ ...clicked, lat: p.lat, lng: p.lng, onPin: true }, same, building);
+      showBuildingList({ ...clicked, lat: p.lat, lng: p.lng, onPin: true, reviewed: p }, same, building);
       setCardReviewAddr(p.address); // showBuildingList 가 처음에 카드 상태를 비우므로, 카드를 띄운 뒤 이 핀을 다시 선택으로
     });
   };
@@ -426,14 +435,7 @@ export default function App() {
       if (!user) return;
       if (openCard && p.lat != null) openReviewedCard(p);
       else setCardReviewAddr(null); // 앞서 핀을 눌러 채워 둔 선택은 풀고, 이 주소의 핀(후기 패널)이 채워지게
-      setReviewZone({
-        id: p.target_id,
-        type: "building",
-        name: p.address,
-        address: p.address,
-        note: reviewNote(p),
-        rated: true, // 후기를 쓰거나 지우면 note 를 다시 계산 (fetchReviewed)
-      });
+      setReviewZone(reviewedZone(p));
       return user; // 로그인해서 패널을 열었는지 부른 쪽에서 알 수 있게
     });
 
@@ -843,7 +845,10 @@ export default function App() {
     q(".cc-cat").textContent = `${list.length}곳`;
     q(".cc-addr").textContent = key;
     // 건물 후기: 도로명주소로 묶어서, 같은 건물이면 어느 가게를 눌러 들어와도 같은 후기 목록 (번호는 처음 누른 장소, 기록용)
-    const reviewTarget = { id: clicked.id, type: "building", name: title, address: key, note: `${list.length}곳` };
+    // 후기 핀에서 연 카드면 목록에서 열 때와 같은 패널 머리말 (주소·후기 수·별점)
+    const reviewTarget = clicked.reviewed
+      ? reviewedZone(clicked.reviewed)
+      : { id: clicked.id, type: "building", name: title, address: key, note: `${list.length}곳` };
     q(".cc-reviews").onclick = () => toggleReviewPanel(reviewTarget);
     const ul = q(".bl-list");
     // 가게 카드를 접을 때는 펼칠 때를 거꾸로 돌려 왼쪽으로 밀어 넣고 사라지게 함 (다른 가게로 바꿀 때는 겹치지 않게 바로 뺌)
