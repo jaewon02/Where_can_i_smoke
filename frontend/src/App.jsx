@@ -411,18 +411,20 @@ export default function App() {
   };
 
   // 목록에서 후기 있는 주소를 고르면 건물 후기 패널 (같은 주소의 장소·건물 후기를 모아 봄)
-  const pickReviewed = (p) =>
-    requireLogin().then(
-      (user) =>
-        user &&
-        setReviewZone({
-          id: p.target_id,
-          type: "building",
-          name: p.address,
-          address: p.address,
-          note: `후기 ${p.count}개 · ★ ${p.rating}`,
-        })
-    );
+  // openCard: 목록에서 골랐을 때 true. 그 주소의 핀을 누른 것처럼 건물 카드도 새로 띄우고(이전 카드는 닫히고 이전 핀의 선택은 풀림) 그 핀을 채움
+  const pickReviewed = (p, openCard = false) =>
+    requireLogin().then((user) => {
+      if (!user) return;
+      if (openCard && p.lat != null) openReviewedCard(p);
+      else setCardReviewAddr(null); // 앞서 핀을 눌러 채워 둔 선택은 풀고, 이 주소의 핀(후기 패널)이 채워지게
+      setReviewZone({
+        id: p.target_id,
+        type: "building",
+        name: p.address,
+        address: p.address,
+        note: `후기 ${p.count}개 · ★ ${p.rating}`,
+      });
+    });
 
   // 켜져 있는 종류만 마커/원으로 그림
   const drawZones = () => {
@@ -693,6 +695,7 @@ export default function App() {
   const openClickCard = (latLng) => {
     const map = mapRef.current;
     closeClickCard();
+    setReviewZone(null); // 지도의 다른 곳을 누르면 오른쪽 후기 패널도 닫음 (쓰던 글은 보관됨)
     infoRef.current.close();
     if (map.getLevel() > 4) return; // 장소 이름은 많이 확대했을 때만 지도에 보임
     const reqId = clickReqRef.current;
@@ -1238,7 +1241,7 @@ export default function App() {
                 // 목록은 누를 때마다 열기/닫기 (이미 그 주소의 후기 패널이 열려 있으면 닫음)
                 openAddress={reviewZone?.type === "building" && user ? reviewZone.address : null}
                 onPickReviewed={(p) =>
-                  reviewZone?.type === "building" && reviewZone.address === p.address ? setReviewZone(null) : pickReviewed(p)
+                  reviewZone?.type === "building" && reviewZone.address === p.address ? setReviewZone(null) : pickReviewed(p, true)
                 }
               />
             )}
