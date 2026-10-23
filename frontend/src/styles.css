@@ -131,7 +131,7 @@ body { margin: 0; font-family: system-ui, "Noto Sans KR", sans-serif; }
 .sidebar-empty .zl-msg { padding: 4px 4px 0; }
 .empty-box { flex: 1; border-radius: 12px; background: #fff; border: 1px solid #e6e6e6; }
 /* 흡연구역 오른쪽 패널의 종류별 이용 안내 */
-.zone-guide { margin-top: 16px; font-size: 14px; line-height: 1.6; }
+.zone-guide { margin-top: 16px; padding: 14px 16px; border: 1px solid #e6e6e6; border-radius: 12px; font-size: 14px; line-height: 1.6; }
 .zone-guide h3 { margin: 0 0 6px; font-size: 15px; font-weight: 700; }
 .zone-guide h4 { margin: 16px 0 6px; font-size: 13px; font-weight: 700; color: #444; }
 .zg-intro { margin: 0; padding: 12px 14px; border-radius: 8px; background: #f5f6f7; color: #555; font-size: 13px; }
