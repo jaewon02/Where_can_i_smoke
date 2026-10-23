@@ -154,6 +154,7 @@ export default function App() {
   const facilityAreasRef = useRef([]); // 규칙으로 찾은 금연시설의 범위
   const nearRef = useRef({ lat: null, lng: null, rows: [] }); // 내 위치 주변에서 받아 둔 시설 (금연구역 판단용)
   const pulseRef = useRef(null); // 금연구역 안에 있을 때 내 위치에 띄우는 경고 파동
+  const zoneRangeRef = useRef({ key: "", polys: [] }); // 내가 들어가 있는 금연구역의 빨간 범위
   const facilityBadgesRef = useRef([]);
   const areaPolysRef = useRef([]);
   const areasKeyRef = useRef("");
@@ -528,10 +529,33 @@ export default function App() {
     // 이미 지도에 붙어 있으면 다시 붙이지 않음 (다시 붙이면 라벨이 깜빡이며 사라졌다 나타남). 위치만 옮김
     if (pulseRef.current.getMap() !== mapRef.current) pulseRef.current.setMap(mapRef.current);
     setMyWave(false);
+    drawZoneRange(hits);
   };
   const hidePulse = () => {
     pulseRef.current?.setMap(null);
     setMyWave(true);
+    drawZoneRange([]);
+  };
+  // 내가 들어가 있는 금연구역의 범위를 빨갛게 그림. 끄는 동안 같은 구역 안이면 다시 그리지 않음
+  const drawZoneRange = (hits) => {
+    const z = zoneRangeRef.current;
+    const key = JSON.stringify(hits.map((h) => [h.lat, h.lng, h.name]));
+    if (key === z.key && z.polys.every((p) => p.getMap() === mapRef.current)) return;
+    z.polys.forEach((p) => p.setMap(null));
+    z.key = key;
+    z.polys = buildAreas(hits).shape.map(
+      (rings) =>
+        new kakao.maps.Polygon({
+          map: mapRef.current,
+          path: rings.map((ring) => ring.map(([lng, lat]) => new kakao.maps.LatLng(lat, lng))),
+          strokeWeight: 2.5,
+          strokeColor: COLORS.nonsmoking,
+          strokeOpacity: 0.9,
+          fillColor: COLORS.nonsmoking,
+          fillOpacity: 0.2,
+          zIndex: 1,
+        })
+    );
   };
   // 금연구역 경보(빨간 파동)와 겹치지 않게, 경보가 떠 있는 동안은 내 위치의 파란 파동을 끔. 바뀔 때만 이미지를 갈아 끼움
   const setMyWave = (wave) => {

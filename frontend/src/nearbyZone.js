@@ -1,4 +1,4 @@
-// 내 위치가 금연구역 안인지 판단. 화면에는 금연구역을 그리지 않고 이 계산 결과만 알림으로 씀
+// 내 위치가 금연구역 안인지 판단. 화면에는 들어가 있는 구역의 범위만 빨갛게 그림
 //
 // rows: /api/facilities 가 주는 시설 목록 [{ type_key, name, lat, lng, area?, r? }]
 //   area: 시설 경계선 기준 금연 구역 (MultiPolygon [폴리곤[링[[lng,lat]]]]), 없으면 점(lat,lng) 기준 반지름 r(m) 원
@@ -33,7 +33,7 @@ const counts = (f) => {
   return t && !t.hidden && !(t.include && !t.include(f.name));
 };
 
-// 내 위치(lat, lng)가 들어 있는 금연구역 목록: [{ name, label }]
+// 내 위치(lat, lng)가 들어 있는 금연구역 목록: [{ name, label, lat, lng, r, area }] (범위를 그릴 수 있게 시설 정보도 둠)
 export function findZonesAt(rows, lat, lng) {
-  return rows.filter((f) => counts(f) && contains(f, lat, lng)).map((f) => ({ name: f.name, label: RULE_BY_KEY[f.type_key].label }));
+  return rows.filter((f) => counts(f) && contains(f, lat, lng)).map((f) => ({ ...f, label: RULE_BY_KEY[f.type_key].label }));
 }
