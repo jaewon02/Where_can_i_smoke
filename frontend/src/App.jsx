@@ -24,9 +24,9 @@ const COLORS = { smoking: "#1f9d55", nonsmoking: "#e5484d" };
 // 카카오 지도 레벨은 숫자가 작을수록 많이 확대한 것. 화면이 복잡해지지 않게 확대했을 때만 금연구역을 보여줌
 const AREA_MAX_LEVEL = 3; // 이 레벨 이하로 확대했을 때만 금연구역 범위 표시
 const BADGE_MAX_LEVEL = 3; // 이 레벨 이하로 확대했을 때만 금연구역 배지 표시
-const ZONE_MAX_LEVEL = 3; // 이 레벨 이하로 확대했을 때만 공공 흡연구역 핀·목록 표시
-const ALERT_MAX_LEVEL = 3; // 이 레벨 이하로 확대했을 때만 내 위치의 금연구역 경보(파동·라벨) 표시
-const REVIEW_MAX_LEVEL = 3; // 이 레벨 이하로 확대했을 때만 후기 핀·목록 표시
+const ZONE_MAX_LEVEL = 4; // 이 레벨 이하로 확대했을 때만 공공 흡연구역 핀·목록 표시
+const ALERT_MAX_LEVEL = 4; // 이 레벨 이하로 확대했을 때만 내 위치의 금연구역 경보(파동·라벨) 표시
+const REVIEW_MAX_LEVEL = 4; // 이 레벨 이하로 확대했을 때만 후기 핀·목록 표시
 // 금연구역은 사용자 눈에는 보이지 않게 하고, 위치(GPS) 판단 등 내부에서만 쓸 예정. 개발 중 확인할 때만 true로
 const SHOW_NONSMOKING_AREAS = false;
 
