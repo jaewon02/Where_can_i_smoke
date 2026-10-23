@@ -13,7 +13,8 @@ const drafts = new Map();
 // 후기 쓰기 + 목록. 일반 장소(targetType "place", 카카오 장소 번호),
 // 건물("building", 도로명주소로 같은 건물 후기를 모아 봄)을 받음 (흡연구역 후기는 받지 않음)
 // onAuthExpired: 쓰기·지우기가 401이면 부름 (로그인 창을 다시 띄우는 쪽에서 처리)
-export default function ReviewSection({ targetType, targetId, name, address, onAuthExpired }) {
+// onReviewsChange: 후기를 쓰거나 지웠을 때 부름 (지도·목록의 별점과 후기 수를 바로 다시 받게)
+export default function ReviewSection({ targetType, targetId, name, address, onAuthExpired, onReviewsChange }) {
   const { user, logout } = useAuth();
   const key = targetType === "building" ? `building:${address}` : `${targetType}:${targetId}`;
   const supported = PLACE_ID_RE.test(targetId) && (targetType === "place" || !!address);
@@ -64,6 +65,7 @@ export default function ReviewSection({ targetType, targetId, name, address, onA
       setList((l) => ({ status: "ok", items: [review, ...l.items], message: "" }));
       setRating(0);
       setContent("");
+      onReviewsChange?.();
     } catch (err) {
       if (err.status === 401) return expire();
       if (err.status === 422) setFormError(err.message);
@@ -79,6 +81,7 @@ export default function ReviewSection({ targetType, targetId, name, address, onA
     try {
       await deleteReview(id);
       setList((l) => ({ ...l, items: l.items.filter((r) => r.id !== id) }));
+      onReviewsChange?.();
     } catch (err) {
       if (err.status === 401) return expire();
       setDeleteErrors((m) => ({ ...m, [id]: err.message }));

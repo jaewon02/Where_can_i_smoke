@@ -29,7 +29,7 @@ function ZoneGuide({ kind }) {
 }
 
 // 오른쪽 후기 패널 (후기 보기). 일반 장소(type: "place", label: 종류) 또는 건물(type: "building")의 정보를 보여주고, 후기는 로그인한 사람에게만 보여줌
-export default function ZonePanel({ zone, onClose, onAuthExpired }) {
+export default function ZonePanel({ zone, onClose, onAuthExpired, onReviewsChange }) {
   const { user } = useAuth(); // 패널이 열릴 때 서버에 로그인 상태를 다시 확인
   const closeRef = useRef(null);
   // 건물(building)이 아니면 일반 장소(place). 흡연구역은 후기 대신 빈 칸을 보여줌
@@ -76,6 +76,7 @@ export default function ZonePanel({ zone, onClose, onAuthExpired }) {
             name={zone.name}
             address={zone.address}
             onAuthExpired={onAuthExpired}
+            onReviewsChange={onReviewsChange}
           />
         )}
       </div>

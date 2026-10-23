@@ -53,6 +53,8 @@ const START_GPS = { lat: 37.417549281400404, lng: 126.9778486982369 }; // 메가
 // const START_GPS = { lat: 37.49799161931449, lng: 127.02770445495885 }; // 강남역 (테스트 용도)
 // const START_GPS = { lat: 37.513328086879035, lng: 127.10404258653621 }; // 잠실 롯데타워 (테스트 용도)
 
+const reviewNote = (p) => `후기 ${p.count}개 · ★ ${p.rating}`;
+
 const svgUri = (svg) => "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
 
 // 내 위치 마커: 흰 테두리 파란 점 + 연한 파란 테두리. wave면 둘레에 퍼져 나가는 파란 파동 2겹 (동작 줄이기 설정이면 생략)
@@ -349,6 +351,12 @@ export default function App() {
     reviewedRef.current = await Promise.all(rows.map(async (r) => ({ ...r, ...(await coordOf(r.address)) })));
     setReviewedList(reviewedRef.current);
     filterReviewed();
+    // 목록에서 연 건물 패널이면 머리말의 후기 수·별점도 새 값으로
+    setReviewZone((z) => {
+      if (!z?.rated) return z;
+      const p = reviewedRef.current.find((r) => r.address === z.address);
+      return { ...z, note: p ? reviewNote(p) : "후기 0개" };
+    });
     // 핀은 주소마다 하나. 누르면 그 주소의 건물 목록 카드 (후기 패널은 카드의 [후기 보기]로 엶)
     reviewMarkersRef.current.forEach(({ marker }) => marker.setMap(null));
     reviewPinImgRef.current ??= { normal: reviewPinImage(kakao), selected: reviewPinImage(kakao, true) };
@@ -423,7 +431,8 @@ export default function App() {
         type: "building",
         name: p.address,
         address: p.address,
-        note: `후기 ${p.count}개 · ★ ${p.rating}`,
+        note: reviewNote(p),
+        rated: true, // 후기를 쓰거나 지우면 note 를 다시 계산 (fetchReviewed)
       });
       return user; // 로그인해서 패널을 열었는지 부른 쪽에서 알 수 있게
     });
@@ -1331,6 +1340,7 @@ export default function App() {
           onClose={() => setReviewZone(null)}
           // 다시 로그인하면 이 패널을 이어서 보고, 로그인하지 않고 닫으면 패널도 닫음
           onAuthExpired={() => requireLogin().then((u) => u || setReviewZone(null))}
+          onReviewsChange={fetchReviewed} // 쓰거나 지우면 지도 핀·목록의 별점과 후기 수를 바로 갱신
         />
       )}
       <LoginButton className="absolute top-3.5 right-3.5 z-10" panelOpen={panelOpen} />
