@@ -425,6 +425,7 @@ export default function App() {
         address: p.address,
         note: `후기 ${p.count}개 · ★ ${p.rating}`,
       });
+      return user; // 로그인해서 패널을 열었는지 부른 쪽에서 알 수 있게
     });
 
   // 켜져 있는 종류만 마커/원으로 그림
@@ -1053,6 +1054,41 @@ export default function App() {
   const pickZoneRef = useRef(pickZone);
   pickZoneRef.current = pickZone;
 
+  // 고른 곳을 지도에서 실제로 보이는 영역(왼쪽 사이드바와 오른쪽 패널 사이)의 가운데로 옮김
+  // 패널은 고른 직후 그려지므로 한 박자 뒤에 잼 (패널이 미끄러져 들어오는 중이어도 너비는 그대로)
+  const centerInView = (lat, lng) =>
+    setTimeout(() => {
+      const map = mapRef.current;
+      if (!map || lat == null) return;
+      const box = document.getElementById("map").getBoundingClientRect();
+      const sidebar = document.querySelector(".sidebar.open")?.getBoundingClientRect();
+      const left = sidebar && sidebar.right < box.right - 200 ? sidebar.right : box.left;
+      const panelW = document.querySelector(".panel")?.offsetWidth ?? 0;
+      const right = panelW && panelW < box.width - 300 ? box.right - panelW : box.right;
+      const dx = (left + right) / 2 - (box.left + box.right) / 2; // 보이는 영역 가운데가 지도 가운데에서 떨어진 만큼
+      map.setCenter(new kakao.maps.LatLng(lat, lng));
+      const proj = map.getProjection();
+      const c = proj.containerPointFromCoords(map.getCenter());
+      map.setCenter(proj.coordsFromContainerPoint(new kakao.maps.Point(c.x - dx, c.y)));
+    }, 50);
+
+  // 왼쪽 목록에서 고르면: 목록 선택 + 오른쪽 패널 + 지도 위 같은 곳에 정보 카드 (핀을 누를 때와 같은 카드), 그곳을 지도 가운데로
+  // 같은 항목을 다시 누르면 패널과 카드를 함께 닫음
+  const pickZoneFromList = (z) => {
+    const wasOpen = reviewZone?.type === "smoking" && reviewZone.id === z.id;
+    pickZone(z);
+    if (wasOpen) return closeClickCard();
+    openZoneCard(z);
+    centerInView(z.lat, z.lng);
+  };
+  const pickReviewedFromList = (p) => {
+    if (reviewZone?.type === "building" && reviewZone.address === p.address) {
+      closeClickCard();
+      return setReviewZone(null);
+    }
+    pickReviewed(p, true).then((user) => user && centerInView(p.lat, p.lng)); // 로그인하면 건물 카드 + 후기 패널을 함께 열고 가운데로
+  };
+
   useEffect(() => {
     if (!kakao) return;
     const map = new kakao.maps.Map(document.getElementById("map"), {
@@ -1259,14 +1295,12 @@ export default function App() {
                 origin={listOrigin}
                 // 패널이 열린 구역, 없으면 지도 핀 카드를 띄운 구역을 선택 표시
                 selectedId={reviewZone?.type === "smoking" ? reviewZone.id : selectedId}
-                onPick={pickZone}
+                onPick={pickZoneFromList}
                 reviewed={visibleReviewed}
                 reviewHidden={zoomLevel > REVIEW_MAX_LEVEL}
                 // 목록은 누를 때마다 열기/닫기 (이미 그 주소의 후기 패널이 열려 있으면 닫음)
                 openAddress={reviewZone?.type === "building" && user ? reviewZone.address : null}
-                onPickReviewed={(p) =>
-                  reviewZone?.type === "building" && reviewZone.address === p.address ? setReviewZone(null) : pickReviewed(p, true)
-                }
+                onPickReviewed={pickReviewedFromList}
               />
             )}
           </SearchBox>
