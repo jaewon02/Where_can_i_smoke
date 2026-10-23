@@ -91,11 +91,15 @@ function pinImage(kakao, type) {
 }
 
 // 후기가 있는 장소·건물 핀: 흡연구역 핀과 같은 모양, 흰 바탕에 초록 테두리·글씨 "흡연리뷰"
-function reviewPinImage(kakao) {
+// selected(지금 누른/후기를 보고 있는 핀 하나): 속을 진한 청록으로 채우고 글씨는 흰색
+function reviewPinImage(kakao, selected = false) {
+  const fill = selected ? "#0f766e" : "#fff";
+  const line = selected ? "#fff" : "#1f9d55";
+  const text = selected ? "#fff" : "#1f9d55";
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="38" height="51" viewBox="0 0 40 54">
     <defs><filter id="s" x="-30%" y="-20%" width="160%" height="150%"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity=".3"/></filter></defs>
-    <path filter="url(#s)" d="M20 2C10 2 2 10 2 20c0 13 18 31 18 31s18-18 18-31C38 10 30 2 20 2z" fill="#fff" stroke="#1f9d55" stroke-width="3"/>
-    <text x="20" y="20" text-anchor="middle" dominant-baseline="central" fill="#1f9d55" font-size="8.5" font-weight="700"
+    <path filter="url(#s)" d="M20 2C10 2 2 10 2 20c0 13 18 31 18 31s18-18 18-31C38 10 30 2 20 2z" fill="${fill}" stroke="${line}" stroke-width="3"/>
+    <text x="20" y="20" text-anchor="middle" dominant-baseline="central" fill="${text}" font-size="8.5" font-weight="700"
       font-family="'Malgun Gothic','Apple SD Gothic Neo',sans-serif" textLength="28" lengthAdjust="spacingAndGlyphs">흡연리뷰</text></svg>`;
   return new kakao.maps.MarkerImage(svgUri(svg), new kakao.maps.Size(38, 51), { offset: new kakao.maps.Point(19, 49) });
 }
@@ -128,6 +132,11 @@ export default function App() {
   const reviewZoneRef = useRef(reviewZone); // 지도 카드 버튼(DOM 이벤트)에서 지금 열린 패널을 알려고
   reviewZoneRef.current = reviewZone;
   const panelOpen = Boolean(reviewZone && (user || reviewZone.type === "smoking")); // 흡연구역 패널은 후기가 없어 로그인 없이도 엶
+  const [cardReviewAddr, setCardReviewAddr] = useState(null); // 핀을 눌러 건물 카드를 띄운 후기 주소 (카드가 닫히면 해제)
+  // 채워서 보여줄 후기 핀의 주소: 핀을 눌러 카드가 떠 있으면 그 주소, 아니면 후기 패널이 열려 있는 건물 주소
+  const selectedPinAddr = cardReviewAddr ?? (reviewZone?.type === "building" && user ? reviewZone.address : null);
+  const selectedPinAddrRef = useRef(null);
+  selectedPinAddrRef.current = selectedPinAddr;
   const [myPosRef, myPosStyle] = usePanelOffset(panelOpen); // 후기 패널이 열리면 [내 위치로]도 패널 옆으로 (좁은 화면은 그대로)
   const [showSmoking, setShowSmoking] = useState(true); // 흡연모드 (지도 왼쪽 위 버튼, 처음엔 켜짐). 켜면 흡연구역 핀이 보이고, 길찾기에서 흡연구역을 들르고, 금연 안내와 오늘의 담배가 나타남 (꺼져 있으면 안 보임)
   const [showNon, setShowNon] = useState(true); // 비흡연구역 + 주변 금연시설
@@ -138,6 +147,7 @@ export default function App() {
   const reviewedRef = useRef([]); // 후기가 있는 주소 + 좌표 { address, count, rating, target_id, lat, lng }
   const coordsRef = useRef(new Map()); // 주소 -> 좌표 (카카오 주소 검색은 주소마다 한 번만)
   const reviewMarkersRef = useRef([]); // 후기가 있는 주소의 핀들
+  const reviewPinImgRef = useRef(null); // 후기 핀 이미지 { normal, selected }
   const mapRef = useRef(null);
   const markersRef = useRef([]);
   const zoneAreasRef = useRef([]); // 직접 등록한 비흡연구역의 범위
@@ -162,6 +172,7 @@ export default function App() {
   // 길찾기 도착지 주변 추천: { loading, error, near, place } (흡연모드에서 도착지가 있을 때만, 아니면 null)
   const [recommend, setRecommend] = useState(null);
   const [reviewedList, setReviewedList] = useState([]); // reviewedRef 와 같은 내용. 바뀌면 추천을 다시 계산하려고 상태로도 둠
+  useEffect(() => paintReviewPins(), [selectedPinAddr, reviewedList]); // 선택이 바뀌거나 핀이 새로 만들어지면 모양 반영
   const recommendAddrsRef = useRef([]); // 추천된 후기 장소 주소들: 이 핀들은 확대 레벨과 상관없이 보임
   const recommendOverlaysRef = useRef([]); // 추천 이름표와 추천 흡연구역 핀
 
@@ -339,7 +350,8 @@ export default function App() {
     filterReviewed();
     // 핀은 주소마다 하나. 누르면 그 주소의 건물 목록 카드 (후기 패널은 카드의 [후기 보기]로 엶)
     reviewMarkersRef.current.forEach(({ marker }) => marker.setMap(null));
-    const image = reviewPinImage(kakao);
+    reviewPinImgRef.current ??= { normal: reviewPinImage(kakao), selected: reviewPinImage(kakao, true) };
+    const image = reviewPinImgRef.current.normal;
     reviewMarkersRef.current = reviewedRef.current
       .filter((p) => p.lat != null)
       .map((p) => {
@@ -354,6 +366,19 @@ export default function App() {
         return { marker, address: p.address };
       });
     syncReviewMarkers();
+    paintReviewPins();
+  };
+
+  // 선택된 후기 핀 하나만 속을 채운 모양으로 (나머지는 흰 바탕), 다른 핀에 가려지지 않게 위로
+  const paintReviewPins = () => {
+    const imgs = reviewPinImgRef.current;
+    if (!imgs) return;
+    const addr = selectedPinAddrRef.current;
+    reviewMarkersRef.current.forEach(({ marker, address }) => {
+      const on = addr != null && address === addr;
+      marker.setImage(on ? imgs.selected : imgs.normal);
+      marker.setZIndex(on ? 5 : 1);
+    });
   };
 
   // 후기 핀 보이기: 흡연모드이고 많이 확대했을 때만. 단, 길찾기에서 추천된 후기 장소 1곳은 확대 레벨과 상관없이
@@ -371,12 +396,17 @@ export default function App() {
   const openReviewedCard = (p) => {
     infoRef.current.close();
     closeClickCard();
+    setCardReviewAddr(p.address); // 누른 순간부터 이 핀을 채움 (카드가 열려 있는 동안)
     const reqId = clickReqRef.current;
     findPlacesAt(kakao, p.lat, p.lng, 50).then(({ places, building }) => {
-      if (reqId !== clickReqRef.current) return; // 그새 다른 곳을 눌렀으면 무시
+      if (reqId !== clickReqRef.current) {
+        setCardReviewAddr((a) => (a === p.address ? null : a)); // 그새 다른 곳을 눌러 카드가 안 뜨면 이 핀의 선택은 해제 (다른 핀을 이미 골랐다면 그대로 둠)
+        return; // 그새 다른 곳을 눌렀으면 무시
+      }
       const same = places.filter((x) => x.groupCode !== "BUS" && (x.roadAddress || x.jibunAddress) === p.address);
       const clicked = same[0] ?? { id: p.target_id, name: building?.name || p.address, categoryPath: "", roadAddress: p.address, jibunAddress: "" };
       showBuildingList({ ...clicked, lat: p.lat, lng: p.lng, onPin: true }, same, building);
+      setCardReviewAddr(p.address); // showBuildingList 가 처음에 카드 상태를 비우므로, 카드를 띄운 뒤 이 핀을 다시 선택으로
     });
   };
 
@@ -654,6 +684,7 @@ export default function App() {
     clickCardRef.current?.setMap(null);
     clickCardRef.current = null;
     setSelectedId(null); // 흡연구역 카드였다면 목록의 선택 표시도 해제
+    setCardReviewAddr(null); // 후기 핀 선택 표시도 해제
   };
 
   // 지도의 장소(주민센터, 은행, 아파트, 상가, 일반 가게, 버스정류장 등)를 누르면 그 장소의 정보 카드를 띄움
